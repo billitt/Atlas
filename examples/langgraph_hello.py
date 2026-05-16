@@ -36,7 +36,7 @@ def main() -> None:
     last = result["messages"][-1]
     content = getattr(last, "content", last)
     print(f"Model: {OLLAMA_CHAT_MODEL}")
-    print(f"LangGraph → Granite: {content}")
+    print(f"LangGraph -> Granite: {content}")
 
 
 if __name__ == "__main__":

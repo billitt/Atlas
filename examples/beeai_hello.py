@@ -12,12 +12,12 @@ from services.llm import BEEAI_MODEL_NAME
 
 async def run() -> None:
     llm = ChatModel.from_name(BEEAI_MODEL_NAME)
-    response = await llm.create(
-        messages=[UserMessage("You are Atlas. In one short sentence, say hello from BeeAI.")],
+    response = await llm.run(
+        [UserMessage("You are Atlas. In one short sentence, say hello from BeeAI.")],
     )
     text = response.get_text_content()
     print(f"Model: {BEEAI_MODEL_NAME}")
-    print(f"BeeAI → Granite: {text}")
+    print(f"BeeAI -> Granite: {text}")
 
 
 def main() -> None:

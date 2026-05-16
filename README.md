@@ -4,7 +4,9 @@ Global business intelligence platform powered by protocol-native AI agents (MCP 
 
 See [PRD.md](PRD.md) for architecture and build phases.
 
-## Phase 0 — Environment setup
+## Phase 0 — Environment setup (complete)
+
+Phase 0 verified 2026-05-16. See [docs/DEVLOG.md](docs/DEVLOG.md) for run logs and ADR-001.
 
 ### Prerequisites
 
@@ -15,6 +17,8 @@ See [PRD.md](PRD.md) for architecture and build phases.
 ### 1. Pull Granite
 
 ```powershell
+# If ollama is not on PATH (Windows):
+# & "$env:LOCALAPPDATA\Programs\Ollama\ollama.exe" pull ibm/granite4.1:8b
 ollama pull ibm/granite4.1:8b
 ```
 
