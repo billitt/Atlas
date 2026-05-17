@@ -5,7 +5,9 @@ from __future__ import annotations
 import asyncio
 import json
 import sys
+from datetime import datetime
 from pathlib import Path
+from time import perf_counter
 
 import httpx
 
@@ -13,6 +15,7 @@ from agents.geopolitical.agent import GeopoliticalRiskAgent
 from agents.market.agent import DEFAULT_MCP_URL, MarketIntelligenceAgent
 from agents.supply_chain.agent import SupplyChainAgent
 from agents.synthesis.agent import SynthesisAgent
+from observability.run_logger import save_run
 from orchestration.graph import build_synthesis_graph
 from protocols.a2a.discovery import load_cards
 from protocols.a2a.server import A2AServer
@@ -88,6 +91,8 @@ async def run() -> None:
         synthesis_agent = SynthesisAgent(agent_cards)
         app = build_synthesis_graph(synthesis_agent)
 
+        started_at = datetime.now().isoformat(timespec="seconds")
+        start_time = perf_counter()
         final_state = await app.ainvoke(
             {
                 "query": query,
@@ -97,6 +102,7 @@ async def run() -> None:
                 "sources": [],
             }
         )
+        duration_seconds = round(perf_counter() - start_time, 3)
         briefing = final_state["briefing"]
 
         print("\n" + "=" * 80)
@@ -110,6 +116,19 @@ async def run() -> None:
 
         print("\nPer-agent sources:")
         print(json.dumps(briefing["per_agent_sources"], indent=2))
+
+        save_run(
+            {
+                "timestamp": started_at,
+                "query": query,
+                "execution_plan": briefing["execution_plan"],
+                "agent_results": briefing["agent_results"],
+                "sources": briefing["per_agent_sources"],
+                "confidence": briefing["overall_confidence"],
+                "final_briefing": briefing["combined_analysis"],
+                "duration_seconds": duration_seconds,
+            }
+        )
     finally:
         for server in servers:
             server.shutdown()

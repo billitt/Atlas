@@ -18,6 +18,7 @@ build/
 # Atlas runtime data
 data/chroma/
 data/sqlite/
+runs/
 *.db
 
 # IDE
