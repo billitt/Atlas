@@ -281,3 +281,86 @@ Rules:
 - Free-form plan text — rejected; hard to execute or trace.
 - Full graph schema with typed edges and conditions — deferred; too much machinery for Phase 4.
 - Directly asking Granite to call agents without a plan object — rejected; weaker explainability and harder debugging.
+
+---
+
+## Phase 5 — Three-tier memory architecture
+
+**Goal:** Add persistent memory so agents can retrieve semantic context, persist run history, and expose per-query working memory.
+
+### Added
+
+| Path | Purpose |
+|------|---------|
+| `services/embeddings.py` | Ollama `/api/embed` wrapper using `OLLAMA_EMBED_MODEL` with chat-model fallback |
+| `memory/semantic.py` | ChromaDB semantic memory (`SemanticMemory`) |
+| `memory/episodic.py` | SQLite + SQLModel episodic memory (`EpisodicMemory`) |
+| `memory/working.py` | Per-query scratchpad (`WorkingMemory`) |
+| `examples/memory_demo.py` | Standalone proof that all three memory tiers work |
+
+### Modified
+
+| Path | Change |
+|------|--------|
+| `agents/market/agent.py` | Queries semantic memory before analysis; logs successful executions to episodic memory |
+| `agents/synthesis/agent.py` | Queries similar past briefings; logs final briefings to episodic memory |
+| `examples/synthesis_demo.py` | Saves JSON run logs and SQLite episodic records; prints memory persistence summary |
+| `observability/run_logger.py` | Adds `memory_stats` to JSON run artifacts |
+| `.env.example` | Adds `OLLAMA_EMBED_MODEL=granite-embedding:278m` |
+| `pyproject.toml` | Adds `memory`, `observability`, and `atlas-memory-demo` |
+
+### Run
+
+```bash
+# Pull recommended embedding model once
+ollama pull granite-embedding:278m
+
+# Prove all three memory tiers
+python -m examples.memory_demo
+```
+
+### Phase 5 outcome
+
+**Complete** when semantic memory can ingest/query a sample document, episodic memory can store/query a briefing, and working memory can accumulate/format/clear per-query state.
+
+---
+
+## ADR-005: Episodic memory schema design
+
+**Status:** Accepted (Phase 5)
+
+**Context:** Atlas needs durable memory of user-facing briefings, agent executions, and future alerts. This memory should support auditability, trend analysis, and demo reproducibility without introducing operational database overhead.
+
+**Decision:**
+
+- Use **SQLite + SQLModel** for episodic memory.
+- Store three append-only tables:
+  - `BriefingRecord` — final synthesized outputs, plans, sources, confidence, duration.
+  - `AgentExecution` — per-agent task/result/confidence/duration records.
+  - `AlertRecord` — future alert trigger and assessment history.
+- Store plan, sources, agent chains, and result payloads as JSON columns.
+- Keep records append-only for now; corrections should create new records instead of mutating history.
+
+**Why these tables:**
+
+- `BriefingRecord` is the user-facing historical memory.
+- `AgentExecution` lets us inspect which specialist produced which result.
+- `AlertRecord` reserves the same pattern for Phase 9 alerting.
+
+**Why append-only:**
+
+- Preserves the decision trail for interview demos and future observability.
+- Makes confidence history meaningful over time.
+- Avoids silent rewriting of previous assessments.
+
+**Why SQLite over Postgres:**
+
+- Atlas is a single-user, local-first demo target.
+- SQLite has no service dependency and works offline.
+- SQLModel keeps a future path to Postgres if the project becomes multi-user.
+
+**Consequences:**
+
+- Queries are simple and local.
+- JSON fields are flexible while schemas are still emerging.
+- More advanced search/ranking can be added later without changing the persisted event model.

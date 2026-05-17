@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import json
 import re
+from time import perf_counter
 from typing import Any
 
 from agents.base import AgentResult, BaseAgent, Confidence
 from agents.market import tools as market_tools
+from memory.episodic import EpisodicMemory
+from memory.semantic import SemanticMemory
 from protocols.mcp.client import McpClient
 from services.llm import chat
 
@@ -49,11 +52,15 @@ class MarketIntelligenceAgent(BaseAgent):
         *,
         max_retries: int = 2,
         mcp_server_name: str = "mcp-market-data",
+        semantic_memory: SemanticMemory | None = None,
+        episodic_memory: EpisodicMemory | None = None,
     ) -> None:
         super().__init__(max_retries=max_retries)
         self.mcp = mcp_client
         self.mcp_server_name = mcp_server_name
         self._reflection_feedback = ""
+        self.semantic_memory = semantic_memory or SemanticMemory()
+        self.episodic_memory = episodic_memory or EpisodicMemory()
 
     async def setup(self) -> None:
         """Load tool definitions from the MCP server (call once before run)."""
@@ -148,6 +155,7 @@ JSON schema:
             fetched_blocks.append(json.dumps({"symbol": symbol, "quote": quote}, indent=2))
 
         data_section = "\n\n".join(fetched_blocks) if fetched_blocks else "(no data fetched)"
+        semantic_context = self._semantic_context(query)
         correction_block = ""
         if self._reflection_feedback:
             correction_block = f"""
@@ -163,6 +171,9 @@ User question: {query}
 
 Market data (from MCP / Yahoo Finance):
 {data_section}
+
+Relevant semantic memory context:
+{semantic_context}
 {correction_block}
 
 Write a concise analyst-style answer (2–4 short paragraphs) that:
@@ -229,7 +240,36 @@ Respond with ONLY valid JSON (no markdown):
     async def run(self, query: str) -> AgentResult:
         """Override to stash reflection feedback between retries for replanning."""
         self._reflection_feedback = ""
-        return await super().run(query)
+        start = perf_counter()
+        result = await super().run(query)
+        duration = round(perf_counter() - start, 3)
+        try:
+            self.episodic_memory.log_agent_execution(
+                agent_name="market",
+                task=query,
+                result=result,
+                confidence=result["confidence"],
+                duration=duration,
+            )
+            print("[market.memory] Logged agent execution to episodic memory")
+        except Exception as exc:
+            print(f"[market.memory] Episodic logging skipped: {exc}")
+        return result
+
+    def _semantic_context(self, query: str) -> str:
+        try:
+            if self.semantic_memory.count() == 0:
+                return "(no semantic memory documents stored)"
+            matches = self.semantic_memory.query(query, n_results=3)
+        except Exception as exc:
+            return f"(semantic memory unavailable: {exc})"
+
+        if not matches:
+            return "(no relevant semantic memory matches)"
+        return "\n\n".join(
+            f"- {match['text']}\n  metadata={match['metadata']} distance={match['distance']}"
+            for match in matches
+        )
 
 
 def _normalize_confidence(value: str) -> Confidence:

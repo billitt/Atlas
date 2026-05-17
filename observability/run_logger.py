@@ -26,6 +26,7 @@ def save_run(run_data: dict[str, Any]) -> Path:
         "confidence": run_data.get("confidence"),
         "final_briefing": run_data.get("final_briefing"),
         "duration_seconds": run_data.get("duration_seconds"),
+        "memory_stats": run_data.get("memory_stats", {}),
     }
 
     path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")

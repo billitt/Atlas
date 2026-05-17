@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime
 from typing import Any
 
 from agents.synthesis.planner import agent_key, create_execution_plan
+from memory.episodic import EpisodicMemory
 from protocols.a2a.client import A2AClient
 from services.llm import chat
 
@@ -20,10 +22,17 @@ class SynthesisAgent:
     multiple A2A agents, and synthesizes their returned artifacts.
     """
 
-    def __init__(self, agent_cards: list[JsonDict], *, a2a_client: A2AClient | None = None) -> None:
+    def __init__(
+        self,
+        agent_cards: list[JsonDict],
+        *,
+        a2a_client: A2AClient | None = None,
+        episodic_memory: EpisodicMemory | None = None,
+    ) -> None:
         self.agent_cards = agent_cards
         self.a2a = a2a_client or A2AClient(timeout=240.0)
         self.card_by_key = {agent_key(card): card for card in agent_cards}
+        self.episodic_memory = episodic_memory or EpisodicMemory()
 
     def plan(self, query: str) -> JsonDict:
         return create_execution_plan(query, self.agent_cards)
@@ -68,6 +77,8 @@ class SynthesisAgent:
     def synthesize(self, query: str, plan: JsonDict, agent_results: list[JsonDict]) -> JsonDict:
         """Use Granite to merge specialist outputs into one briefing."""
         compact_results = [_compact_result(result) for result in agent_results]
+        past_briefings = self.episodic_memory.query_briefings(query, limit=3)
+        past_context = _format_past_briefings(past_briefings)
         prompt = f"""You are the Atlas Synthesis Agent.
 Create a unified intelligence briefing from specialist agent outputs.
 
@@ -80,22 +91,42 @@ Execution plan:
 Specialist results:
 {json.dumps(compact_results, indent=2)}
 
+Relevant past briefings from episodic memory:
+{past_context}
+
 Instructions:
 - Merge the market, geopolitical, and supply-chain perspectives.
 - Explicitly call out confidence differences and live-data limitations.
 - Resolve conflicts; if no direct conflict exists, say the outputs are complementary.
 - Keep the briefing grounded in the specialist artifacts.
+- If past briefings exist, briefly mention whether the current assessment changed.
 
 Return 4-6 concise paragraphs plus a short "Key sources" line.
 """
         combined_analysis = chat(prompt).strip()
-        return {
+        briefing = {
             "combined_analysis": combined_analysis,
             "per_agent_sources": _collect_sources(agent_results),
             "overall_confidence": _overall_confidence(agent_results),
             "execution_plan": plan,
             "agent_results": compact_results,
         }
+        try:
+            self.episodic_memory.log_briefing(
+                {
+                    "timestamp": datetime.now().isoformat(timespec="seconds"),
+                    "query": query,
+                    "execution_plan": plan,
+                    "agent_results": compact_results,
+                    "final_briefing": combined_analysis,
+                    "confidence": briefing["overall_confidence"],
+                    "sources": briefing["per_agent_sources"],
+                }
+            )
+            print("[synthesis.memory] Logged briefing to episodic memory")
+        except Exception as exc:
+            print(f"[synthesis.memory] Episodic briefing logging skipped: {exc}")
+        return briefing
 
     async def run(self, query: str) -> JsonDict:
         plan = self.plan(query)
@@ -143,3 +174,15 @@ def _overall_confidence(agent_results: list[JsonDict]) -> str:
     if not confidences:
         return "LOW"
     return min(confidences, key=lambda c: ranks[c])
+
+
+def _format_past_briefings(records: list[Any]) -> str:
+    if not records:
+        return "(no similar past briefings found)"
+    lines: list[str] = []
+    for record in records:
+        lines.append(
+            f"- {record.timestamp.isoformat()} confidence={record.confidence} "
+            f"query={record.query!r}\n  summary={record.final_briefing[:500]}"
+        )
+    return "\n".join(lines)

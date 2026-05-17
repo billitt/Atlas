@@ -15,6 +15,9 @@ from agents.geopolitical.agent import GeopoliticalRiskAgent
 from agents.market.agent import DEFAULT_MCP_URL, MarketIntelligenceAgent
 from agents.supply_chain.agent import SupplyChainAgent
 from agents.synthesis.agent import SynthesisAgent
+from memory.episodic import EpisodicMemory
+from memory.semantic import SemanticMemory
+from memory.working import WorkingMemory
 from observability.run_logger import save_run
 from orchestration.graph import build_synthesis_graph
 from protocols.a2a.discovery import load_cards
@@ -83,12 +86,17 @@ async def run() -> None:
 
         registry = load_cards("agents")
         agent_cards = registry.discover_all()
+        episodic_memory = EpisodicMemory()
+        semantic_memory = SemanticMemory()
+        working_memory = WorkingMemory()
+        working_memory.add("query", query)
+        working_memory.add("agent_card_count", len(agent_cards))
         print("Discovered local Agent Cards:")
         for card in agent_cards:
             skills = ", ".join(skill["id"] for skill in card.get("skills", []))
             print(f"  - {card['name']} at {card['url']} [{skills}]")
 
-        synthesis_agent = SynthesisAgent(agent_cards)
+        synthesis_agent = SynthesisAgent(agent_cards, episodic_memory=episodic_memory)
         app = build_synthesis_graph(synthesis_agent)
 
         started_at = datetime.now().isoformat(timespec="seconds")
@@ -104,6 +112,8 @@ async def run() -> None:
         )
         duration_seconds = round(perf_counter() - start_time, 3)
         briefing = final_state["briefing"]
+        working_memory.add("execution_plan", briefing["execution_plan"])
+        working_memory.add("overall_confidence", briefing["overall_confidence"])
 
         print("\n" + "=" * 80)
         print("SYNTHESIZED BRIEFING")
@@ -117,18 +127,30 @@ async def run() -> None:
         print("\nPer-agent sources:")
         print(json.dumps(briefing["per_agent_sources"], indent=2))
 
-        save_run(
-            {
-                "timestamp": started_at,
-                "query": query,
-                "execution_plan": briefing["execution_plan"],
-                "agent_results": briefing["agent_results"],
-                "sources": briefing["per_agent_sources"],
-                "confidence": briefing["overall_confidence"],
-                "final_briefing": briefing["combined_analysis"],
-                "duration_seconds": duration_seconds,
-            }
+        run_data = {
+            "timestamp": started_at,
+            "query": query,
+            "execution_plan": briefing["execution_plan"],
+            "agent_results": briefing["agent_results"],
+            "sources": briefing["per_agent_sources"],
+            "confidence": briefing["overall_confidence"],
+            "final_briefing": briefing["combined_analysis"],
+            "duration_seconds": duration_seconds,
+            "memory_stats": {
+                "semantic_docs": semantic_memory.count(),
+                "episodic_briefings": episodic_memory.briefing_count(),
+                "working_memory_keys": list(working_memory.get_all().keys()),
+            },
+        }
+        save_run(run_data)
+        episodic_memory.log_briefing(run_data)
+        print(
+            "[memory] Persisted run to JSON and SQLite "
+            f"(semantic_docs={run_data['memory_stats']['semantic_docs']}, "
+            f"episodic_briefings={episodic_memory.briefing_count()}, "
+            f"working_keys={run_data['memory_stats']['working_memory_keys']})"
         )
+        working_memory.clear()
     finally:
         for server in servers:
             server.shutdown()

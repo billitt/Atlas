@@ -1,10 +1,12 @@
 # Atlas
 
+**A local-first, protocol-native AI intelligence system: Rust MCP data services + Python A2A agents + LangGraph orchestration + Granite on Ollama.**
+
 Atlas is a local-first global intelligence platform built around protocol-native AI agents. It combines Rust data services, Python agent orchestration, MCP tool access, A2A agent-to-agent delegation, LangGraph workflows, and IBM Granite running locally through Ollama.
 
 The project is designed as a portfolio-grade demonstration of hybrid Rust + Python systems, agentic AI architecture, reflection loops, and open-source/on-prem inference.
 
-See [PRD.md](PRD.md) for the full product plan and [docs/DEVLOG.md](docs/DEVLOG.md) for detailed implementation notes and ADRs.
+See [docs/DEVLOG.md](docs/DEVLOG.md) for implementation notes and ADRs.
 
 ## Current Status
 
@@ -80,7 +82,7 @@ If `ollama` is not on PATH on Windows:
 ### Install Python Package
 
 ```powershell
-cd c:\Users\ezzao\OneDrive\Documents\atlas
+cd atlas
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -e ".[dev]"
@@ -134,7 +136,7 @@ Key files:
 Run:
 
 ```powershell
-cd c:\Users\ezzao\OneDrive\Documents\atlas\rust
+cd atlas\rust
 cargo run -p ollama-check
 ```
 
@@ -162,14 +164,14 @@ Key files:
 Run the server:
 
 ```powershell
-cd c:\Users\ezzao\OneDrive\Documents\atlas\rust
+cd atlas\rust
 cargo run -p mcp-market-data
 ```
 
 Test the Python MCP client:
 
 ```powershell
-cd c:\Users\ezzao\OneDrive\Documents\atlas
+cd atlas
 .\.venv\Scripts\python.exe -m protocols.mcp.client
 ```
 
@@ -200,13 +202,13 @@ Run:
 
 ```powershell
 # Terminal 1
-cd c:\Users\ezzao\OneDrive\Documents\atlas\rust
+cd atlas\rust
 cargo run -p mcp-market-data
 ```
 
 ```powershell
 # Terminal 2
-cd c:\Users\ezzao\OneDrive\Documents\atlas
+cd atlas
 .\.venv\Scripts\python.exe -m examples.market_agent_demo
 ```
 
@@ -238,13 +240,13 @@ Run:
 
 ```powershell
 # Terminal 1: Rust MCP server
-cd c:\Users\ezzao\OneDrive\Documents\atlas\rust
+cd atlas\rust
 cargo run -p mcp-market-data
 ```
 
 ```powershell
 # Terminal 2: A2A demo
-cd c:\Users\ezzao\OneDrive\Documents\atlas
+cd atlas
 .\.venv\Scripts\python.exe -m examples.a2a_demo
 ```
 
@@ -291,13 +293,13 @@ ollama run ibm/granite4.1:8b
 
 ```powershell
 # Terminal 2: Rust MCP market data
-cd c:\Users\ezzao\OneDrive\Documents\atlas\rust
+cd atlas\rust
 cargo run -p mcp-market-data
 ```
 
 ```powershell
 # Terminal 3: Full synthesis demo
-cd c:\Users\ezzao\OneDrive\Documents\atlas
+cd atlas
 .\.venv\Scripts\python.exe -m examples.synthesis_demo
 ```
 
@@ -362,7 +364,7 @@ See [docs/DEVLOG.md](docs/DEVLOG.md) for the full ADR text.
 
 ## Next Phases
 
-Planned from the PRD:
+Planned next:
 
 - Phase 5: Memory architecture
 - Phase 6: Research & Filing Agent / EDGAR MCP server
