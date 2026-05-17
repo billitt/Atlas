@@ -1,0 +1,27 @@
+{
+  "name": "Supply Chain Agent",
+  "description": "Analyzes supply chain dependencies, logistics disruptions, and trade-policy exposure",
+  "url": "http://localhost:9003",
+  "version": "0.1.0",
+  "capabilities": {
+    "streaming": false,
+    "pushNotifications": false
+  },
+  "skills": [
+    {
+      "id": "dependency_map",
+      "name": "Dependency Map",
+      "description": "Map critical suppliers, regions, commodities, and chokepoints"
+    },
+    {
+      "id": "disruption_alert",
+      "name": "Disruption Alert",
+      "description": "Assess disruption risk across logistics and production networks"
+    },
+    {
+      "id": "tariff_impact",
+      "name": "Tariff Impact",
+      "description": "Estimate trade-policy and tariff impacts on supply chains"
+    }
+  ]
+}

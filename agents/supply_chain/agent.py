@@ -1,8 +1,7 @@
-"""Geopolitical Risk Agent.
+"""Supply Chain Agent.
 
-Phase 4 gives this agent real reasoning behavior, but it is still intentionally
-limited: no geopolitical MCP server exists yet, so every answer must disclose
-that it is based on Granite model knowledge rather than live event data.
+This Phase 4 version uses Granite model knowledge only. Real port, trade, and
+supplier graph MCP data arrives later, so the agent must disclose its limits.
 """
 
 from __future__ import annotations
@@ -15,24 +14,24 @@ from agents.base import AgentResult, BaseAgent, Confidence
 from services.llm import chat
 
 
-class GeopoliticalRiskAgent(BaseAgent):
-    """Specialist agent for geopolitical risk, pending live MCP data sources."""
+class SupplyChainAgent(BaseAgent):
+    """Specialist agent for supply chain risk and dependency reasoning."""
 
     async def plan(self, query: str) -> dict[str, Any]:
-        print("[geopolitical.plan] Identifying risk dimensions...")
-        prompt = f"""You are the Atlas Geopolitical Risk Agent in the PLAN phase.
-Create a concise analysis plan for this query.
+        print("[supply_chain.plan] Identifying supply-chain dimensions...")
+        prompt = f"""You are the Atlas Supply Chain Agent in the PLAN phase.
+Create a concise plan for supply-chain analysis.
 
 Query: {query}
 
 Important limitation:
-- No live geopolitical MCP data source is available yet.
-- Your analysis must rely on model knowledge and must disclose that limitation.
+- No live supplier graph, port, tariff, or trade MCP data is available yet.
+- Your analysis must rely on model knowledge and disclose that limitation.
 
 Return ONLY valid JSON:
 {{
-  "risk_dimensions": ["military escalation", "sanctions", "trade disruption"],
-  "entities": ["countries, companies, regions, or assets involved"],
+  "supply_chain_dimensions": ["critical inputs", "shipping chokepoints", "substitution risk"],
+  "entities": ["companies, regions, commodities, components"],
   "rationale": "why these dimensions matter"
 }}
 """
@@ -41,26 +40,26 @@ Return ONLY valid JSON:
             return _parse_json(raw)
         except json.JSONDecodeError:
             return {
-                "risk_dimensions": ["geopolitical escalation", "trade disruption"],
+                "supply_chain_dimensions": ["critical inputs", "logistics chokepoints"],
                 "entities": [],
                 "rationale": "Fallback plan because the model did not return valid JSON.",
             }
 
     async def execute(self, query: str, plan: dict[str, Any]) -> AgentResult:
-        print("[geopolitical.execute] Drafting model-knowledge risk assessment...")
-        prompt = f"""You are the Atlas Geopolitical Risk Agent.
-Assess the geopolitical risks relevant to the query using the plan below.
+        print("[supply_chain.execute] Drafting model-knowledge supply-chain analysis...")
+        prompt = f"""You are the Atlas Supply Chain Agent.
+Analyze the supply-chain implications of the query using the plan below.
 
 Query: {query}
 Plan:
 {json.dumps(plan, indent=2)}
 
 Constraints:
-- You do not have live news, GDELT, sanctions, or event-feed MCP data yet.
-- Do not invent recent events.
+- You do not have live supplier, port, shipping, tariff, or customs MCP data yet.
+- Do not invent current disruptions.
 - Clearly label the assessment as based on model knowledge, not live data.
-- Focus on durable risk channels: escalation paths, trade exposure, chokepoints,
-  sanctions/export controls, and second-order market or supply-chain effects.
+- Focus on dependencies, chokepoints, substitution options, lead-time risk, and
+  likely second-order impacts.
 
 Return 3-5 concise paragraphs.
 """
@@ -70,9 +69,9 @@ Return 3-5 concise paragraphs.
             "sources": [
                 {
                     "type": "model_knowledge",
-                    "agent": "geopolitical",
-                    "note": "Assessment based on Granite model knowledge; live geopolitical MCP data is not implemented yet.",
-                    "planned_dimensions": plan.get("risk_dimensions", []),
+                    "agent": "supply_chain",
+                    "note": "Assessment based on Granite model knowledge; live supply-chain MCP data is not implemented yet.",
+                    "planned_dimensions": plan.get("supply_chain_dimensions", []),
                 }
             ],
             "confidence": "MEDIUM",
@@ -83,17 +82,16 @@ Return 3-5 concise paragraphs.
         query: str,
         draft: AgentResult,
     ) -> tuple[bool, str, Confidence]:
-        print("[geopolitical.reflect] Checking limitation disclosure...")
-        prompt = f"""You are auditing a geopolitical risk draft.
+        print("[supply_chain.reflect] Checking limitation disclosure...")
+        prompt = f"""You are auditing a supply-chain analysis draft.
 
 Query: {query}
 
 Draft:
 {draft["analysis"]}
 
-The draft MUST disclose that it is based on model knowledge, not live data.
-It should avoid claiming current breaking events unless they are framed as general
-risk channels rather than live facts.
+The draft MUST disclose that it is based on model knowledge, not live supplier,
+shipping, tariff, customs, or port data.
 
 Return ONLY valid JSON:
 {{

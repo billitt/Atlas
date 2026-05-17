@@ -201,3 +201,83 @@ python -m examples.a2a_demo
 
 - **gRPC** — rejected for now: stronger typed contracts and streaming, but more setup and less demo-friendly inspection.
 - **Direct Python imports** — rejected: couples agents to implementation details and defeats protocol-native design.
+
+---
+
+## Phase 4 — Multi-agent coordination with Synthesis Agent
+
+**Goal:** One user query is planned as a small execution DAG, delegated to specialist agents over A2A, and synthesized into a unified briefing.
+
+### Added
+
+| Path | Purpose |
+|------|---------|
+| `agents/geopolitical/agent.py` | Model-knowledge geopolitical risk agent with limitation disclosure |
+| `agents/supply_chain/agent.py` | Model-knowledge supply-chain agent with limitation disclosure |
+| `agents/supply_chain/agent_card.json` | Supply Chain Agent A2A Agent Card |
+| `agents/synthesis/planner.py` | Granite-generated execution plan over available Agent Cards |
+| `agents/synthesis/agent.py` | Orchestrator that delegates over A2A and synthesizes results |
+| `orchestration/state.py` | LangGraph state schema and reducers |
+| `orchestration/graph.py` | Traceable `plan -> delegate_to_agents -> synthesize` StateGraph |
+| `examples/synthesis_demo.py` | Taiwan Strait multi-agent demo |
+
+### Run (four services)
+
+```bash
+# Service 1 — Ollama must already be running with Granite pulled
+ollama run ibm/granite4.1:8b
+
+# Service 2 — Rust MCP market data server
+cd rust && cargo run -p mcp-market-data
+
+# Service 3 — Synthesis demo (starts A2A servers on 9001, 9002, 9003)
+python -m examples.synthesis_demo
+```
+
+### Phase 4 outcome
+
+**Complete** when the demo starts three A2A specialist servers, creates a plan from their Agent Cards, delegates the Taiwan Strait query to Market, Geopolitical, and Supply Chain agents, then returns one synthesized briefing with per-agent sources and an execution plan.
+
+---
+
+## ADR-004: Plan object schema
+
+**Status:** Accepted (Phase 4)
+
+**Context:** The Synthesis Agent needs an explicit, inspectable plan so the demo can show why specialists were selected and how work moved across A2A boundaries. The plan should be simple enough for Granite to generate reliably and structured enough for LangGraph and future observability.
+
+**Decision:**
+
+Use a small DAG-shaped JSON object:
+
+```json
+{
+  "steps": [
+    {
+      "agent": "market",
+      "task": "Assess market impact and relevant semiconductor equities",
+      "depends_on": []
+    }
+  ],
+  "rationale": "Why these agents were selected"
+}
+```
+
+Rules:
+
+- `agent` uses stable keys derived from Agent Cards (`market`, `geopolitical`, `supply_chain`).
+- `task` is the delegated natural-language instruction sent over A2A `tasks/send`.
+- `depends_on` is present even though Phase 4 runs sequentially; it keeps the future DAG shape explicit.
+- Execution remains sequential for now because local Granite/Ollama is the single GPU bottleneck.
+
+**Consequences:**
+
+- Easy to print, inspect, and trace in demos.
+- Works naturally with LangGraph nodes and future OpenTelemetry spans.
+- Leaves room for Phase 5+ parallelism or conditional routing without changing the public plan shape.
+
+**Alternatives considered:**
+
+- Free-form plan text — rejected; hard to execute or trace.
+- Full graph schema with typed edges and conditions — deferred; too much machinery for Phase 4.
+- Directly asking Granite to call agents without a plan object — rejected; weaker explainability and harder debugging.

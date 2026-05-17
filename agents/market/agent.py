@@ -83,6 +83,8 @@ User question: {query}
 Rules:
 - Output ONLY valid JSON, no markdown fences.
 - Use Yahoo Finance ticker symbols (e.g. AAPL, TSM for Taiwan Semiconductor, 2330.TW for Taiwan listing).
+- For semiconductor or Taiwan Strait market-impact queries, prefer valid liquid Yahoo symbols such as TSM, NVDA, ASML, SMH, SOXX, and SPY.
+- Avoid ambiguous, index-only, or delisted symbols such as SOX and MXIM unless the user explicitly asks for them.
 - Only request tools that exist in the list above.
 - For "what's happening with X stock" questions, usually call get_quote once per symbol.
 
