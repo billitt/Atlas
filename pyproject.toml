@@ -41,13 +41,14 @@ dev = [
 atlas-verify-ollama = "scripts.verify_ollama:main"
 atlas-langgraph-hello = "examples.langgraph_hello:main"
 atlas-beeai-hello = "examples.beeai_hello:main"
+atlas-market-agent-demo = "examples.market_agent_demo:main"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["services", "examples", "scripts", "protocols"]
+packages = ["services", "examples", "scripts", "protocols", "agents"]
 
 [tool.ruff]
 line-length = 100
