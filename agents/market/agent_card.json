@@ -1,0 +1,27 @@
+{
+  "name": "Market Intelligence Agent",
+  "description": "Analyzes financial markets - equities, commodities, forex, macro indicators",
+  "url": "http://localhost:9001",
+  "version": "1.0.0",
+  "capabilities": {
+    "streaming": false,
+    "pushNotifications": false
+  },
+  "skills": [
+    {
+      "id": "market_snapshot",
+      "name": "Market Snapshot",
+      "description": "Current price, change, and volume for specified symbols"
+    },
+    {
+      "id": "anomaly_scan",
+      "name": "Anomaly Detection",
+      "description": "Scan for unusual price movements or volume spikes"
+    },
+    {
+      "id": "correlation_check",
+      "name": "Cross-Asset Correlation",
+      "description": "Check correlation between specified assets"
+    }
+  ]
+}

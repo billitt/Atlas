@@ -139,3 +139,65 @@ python -m examples.market_agent_demo
 - Retry only `execute` — rejected; bad plans (wrong ticker) need replanning.
 - `max_retries = 0` — rejected; reflection without retry cannot self-correct.
 - BeeAI-native ReAct loop — deferred; explicit phases are easier to trace in demos and interviews.
+
+---
+
+## Phase 3 — A2A protocol layer
+
+**Goal:** Agents can advertise capabilities with Agent Cards, be discovered over HTTP, and accept delegated tasks without callers importing their implementation.
+
+### Added
+
+| Path | Purpose |
+|------|---------|
+| `agents/market/agent_card.json` | Market Intelligence Agent A2A Agent Card |
+| `agents/geopolitical/agent_card.json` | Stub Geopolitical Risk Agent Card |
+| `agents/geopolitical/agent.py` | Placeholder agent returning a canned response |
+| `protocols/a2a/server.py` | Raw HTTP JSON-RPC A2A server (`/.well-known/agent.json`, `/a2a`) |
+| `protocols/a2a/client.py` | Async A2A discovery and `tasks/send` client |
+| `protocols/a2a/discovery.py` | Local Agent Card registry and skill lookup |
+| `examples/a2a_demo.py` | Starts Market A2A server, discovers it, delegates an AAPL task |
+
+### Run (three services)
+
+```bash
+# Service 1 — Ollama must already be running with Granite pulled
+ollama run ibm/granite4.1:8b
+
+# Service 2 — Rust MCP market data server
+cd rust && cargo run -p mcp-market-data
+
+# Service 3 — A2A demo (starts Market Agent A2A server on port 9001)
+python -m examples.a2a_demo
+```
+
+### Phase 3 outcome
+
+**Complete** when the demo discovers the Market Agent's card, sends `tasks/send` over HTTP JSON-RPC, and receives an artifact containing the Market Agent's grounded Phase 2 result.
+
+---
+
+## ADR-003: A2A transport choice
+
+**Status:** Accepted (Phase 3)
+
+**Context:** Atlas needs agent-to-agent delegation before the Synthesis Agent exists. The transport should be easy to inspect in demos, work locally, and remain compatible with the A2A model of Agent Cards plus task delegation.
+
+**Decision:**
+
+- Use **HTTP + JSON-RPC 2.0** for Phase 3 A2A.
+- Expose Agent Cards at `GET /.well-known/agent.json`.
+- Expose task delegation at `POST /a2a` with methods `agent/card` and `tasks/send`.
+- Return agent outputs as A2A-style artifacts with `parts` and structured `metadata`.
+
+**Consequences:**
+
+- Easy to debug with `curl`, browser fetches, and logs.
+- Fits the current local portfolio demo scale without needing gRPC infrastructure.
+- The Synthesis Agent can discover agents by skill and delegate over a stable HTTP boundary.
+- We can add streaming, push notifications, or gRPC later if real-time multi-agent workloads require them.
+
+**Alternatives considered:**
+
+- **gRPC** — rejected for now: stronger typed contracts and streaming, but more setup and less demo-friendly inspection.
+- **Direct Python imports** — rejected: couples agents to implementation details and defeats protocol-native design.

@@ -1,0 +1,27 @@
+{
+  "name": "Geopolitical Risk Agent",
+  "description": "Analyzes geopolitical events, country risk, entity exposure, and event timelines",
+  "url": "http://localhost:9002",
+  "version": "0.1.0",
+  "capabilities": {
+    "streaming": false,
+    "pushNotifications": false
+  },
+  "skills": [
+    {
+      "id": "risk_assessment",
+      "name": "Risk Assessment",
+      "description": "Assess geopolitical risk for countries, regions, or events"
+    },
+    {
+      "id": "event_timeline",
+      "name": "Event Timeline",
+      "description": "Build a timeline of relevant geopolitical events"
+    },
+    {
+      "id": "entity_exposure",
+      "name": "Entity Exposure",
+      "description": "Estimate how companies or assets may be exposed to geopolitical events"
+    }
+  ]
+}

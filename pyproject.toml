@@ -42,6 +42,7 @@ atlas-verify-ollama = "scripts.verify_ollama:main"
 atlas-langgraph-hello = "examples.langgraph_hello:main"
 atlas-beeai-hello = "examples.beeai_hello:main"
 atlas-market-agent-demo = "examples.market_agent_demo:main"
+atlas-a2a-demo = "examples.a2a_demo:main"
 
 [build-system]
 requires = ["hatchling"]
