@@ -29,3 +29,5 @@ data/sqlite/
 .DS_Store
 Thumbs.db
 
+#Guidance PRD
+PRD.md
