@@ -16,6 +16,7 @@ This is a **portfolio project** designed to demonstrate mastery of:
 - Reflection and self-correction patterns
 - Full observability and decision traceability
 - Production-grade engineering on a fully open-source, on-prem stack
+- **Polyglot systems design** — Rust for the performance-critical data layer (MCP servers, ingestion), Python for the intelligence layer (agents, orchestration, UI)
 
 It should be impressive enough to walk through in a technical interview at any top-tier AI or tech company. The demo tells a story, not just "here's a chatbot."
 
@@ -34,15 +35,17 @@ These don't change without explicit discussion:
 
 ## Architecture Overview
 
-Atlas is built on two industry-standard protocols that separate tool connectivity from agent coordination:
+Atlas is a **hybrid Rust + Python system**. The performance-critical data layer (MCP servers, data ingestion, embedding pipeline) is built in Rust. The intelligence layer (agents, orchestration, LLM interaction, UI) is built in Python. The two layers communicate over HTTP — Rust services expose MCP endpoints that the Python agent layer calls as an MCP client.
 
-**MCP (Model Context Protocol)** — Anthropic's open standard for connecting agents to tools and data sources. Every external data adapter in Atlas (FRED, EDGAR, GDELT, Yahoo Finance, etc.) is implemented as an MCP server. This means any MCP-compatible client can plug into Atlas's data layer. We're building infrastructure, not a closed system. MCP is governed by the Linux Foundation's Agentic AI Foundation (AAIF) and is adopted by every major AI provider.
+This split reflects production practice: the hot path is Rust, the reasoning layer is Python. It also demonstrates architectural maturity — knowing where language choice matters and where it doesn't.
+
+**MCP (Model Context Protocol)** — Anthropic's open standard for connecting agents to tools and data sources. Every external data adapter in Atlas (FRED, EDGAR, GDELT, Yahoo Finance, etc.) is implemented as a **Rust MCP server**. This means any MCP-compatible client can plug into Atlas's data layer. We're building infrastructure, not a closed system. MCP is governed by the Linux Foundation's Agentic AI Foundation (AAIF) and is adopted by every major AI provider. Atlas implements MCP servers in Rust directly against the spec using `axum`, `serde`, and `tokio` — building from the spec demonstrates deeper protocol understanding than wrapping an SDK.
 
 **A2A (Agent-to-Agent Protocol)** — Google's open standard for inter-agent communication. Atlas agents discover each other's capabilities through Agent Cards, delegate tasks via the protocol, and exchange structured results over HTTP with JSON-RPC 2.0. A2A reached v1.0 in early 2026 with support for gRPC and signed Agent Cards. This means a third-party agent could theoretically be plugged into the Atlas system and participate without modification.
 
-**LangGraph** — The orchestration layer. Agent workflows are modeled as directed graphs with explicit state, conditional routing, retry logic, and human-in-the-loop checkpoints. The Synthesis Agent's execution plan is itself a DAG — fully traceable in OpenTelemetry.
+**LangGraph** — The orchestration layer (Python). Agent workflows are modeled as directed graphs with explicit state, conditional routing, retry logic, and human-in-the-loop checkpoints. The Synthesis Agent's execution plan is itself a DAG — fully traceable in OpenTelemetry.
 
-**BeeAI** — Used for individual agent construction where it provides a natural fit, particularly for agents that benefit from IBM Granite's native tool-calling patterns. BeeAI handles per-agent logic; LangGraph handles the coordination graph between agents.
+**BeeAI** — Used for individual agent construction (Python) where it provides a natural fit, particularly for agents that benefit from IBM Granite's native tool-calling patterns. BeeAI handles per-agent logic; LangGraph handles the coordination graph between agents.
 
 ```
                     ┌─────────────────┐
@@ -52,7 +55,7 @@ Atlas is built on two industry-standard protocols that separate tool connectivit
                              │
                     ┌────────▼────────┐
                     │   LangGraph     │
-                    │  Orchestrator   │
+                    │  Orchestrator   │  ← Python
                     │  (DAG planner)  │
                     └────────┬────────┘
                              │ A2A Protocol
@@ -60,7 +63,7 @@ Atlas is built on two industry-standard protocols that separate tool connectivit
           │                  │                  │
   ┌───────▼──────┐  ┌───────▼──────┐  ┌───────▼──────┐
   │   Market     │  │  Geopolitical│  │ Supply Chain │
-  │   Intel      │  │  Risk        │  │ & Trade      │
+  │   Intel      │  │  Risk        │  │ & Trade      │  ← Python
   │   Agent      │  │  Agent       │  │ Agent        │
   └───────┬──────┘  └───────┬──────┘  └───────┬──────┘
           │                  │                  │
@@ -69,7 +72,7 @@ Atlas is built on two industry-standard protocols that separate tool connectivit
   ┌───────▼──────┐  ┌───────▼──────┐  ┌───────▼──────┐
   │ FRED, Yahoo  │  │ GDELT, RSS   │  │ Comtrade,    │
   │ Finance,     │  │ UN/WTO,      │  │ BIS, USITC,  │
-  │ Alpha Vant.  │  │ Gov releases │  │ Port data    │
+  │ Alpha Vant.  │  │ Gov releases │  │ Port data    │  ← Rust
   │ (MCP servers)│  │ (MCP servers)│  │ (MCP servers) │
   └──────────────┘  └──────────────┘  └──────────────┘
           │                  │                  │
@@ -86,8 +89,26 @@ Atlas is built on two industry-standard protocols that separate tool connectivit
                     │  Working:       │
                     │   In-context    │
                     └─────────────────┘
-
 ```
+
+---
+
+## Language Boundary
+
+The Rust/Python split follows a clear rule: **Rust owns data, Python owns reasoning.**
+
+| Layer | Language | Why |
+|-------|----------|-----|
+| MCP servers (all data adapters) | Rust | I/O-bound, concurrent network requests, parsing, low memory footprint (5-20MB per server vs 100-200MB Python) |
+| Data ingestion pipeline | Rust | CPU-intensive chunking, tokenization, batching |
+| Embedding service | Rust | High-throughput vector generation via Ollama REST API |
+| Agent logic + reflection | Python | Rapid iteration, string manipulation, LLM interaction |
+| LangGraph orchestration | Python | Framework is Python-only, state management |
+| A2A protocol layer | Python | SDK is Python-only |
+| Memory interfaces | Python | ChromaDB and SQLModel are Python-native |
+| CLI + Web UI | Python | Typer and Streamlit are Python |
+
+The boundary is HTTP. Rust MCP servers expose standard MCP endpoints. Python agents connect as MCP clients. Neither side knows or cares what language the other is written in — that's the point of protocol-native design.
 
 ---
 
@@ -97,7 +118,6 @@ Each agent is an autonomous unit with a defined responsibility, its own MCP tool
 
 ```
 Input → Plan → Execute → Self-Reflect → Output (or retry)
-
 ```
 
 No agent passes output downstream without first critiquing its own work. The Guardian Agent provides a second-pass validation, but it is not the only quality gate — reflection is baked into every agent.
@@ -211,24 +231,22 @@ The end-to-end demo walks through a single compelling scenario that exercises ev
 7. **Alert fires** to CLI terminal with summary and link to full briefing
 8. **Dashboard** displays full reasoning chain, source citations, agent execution graph (via OpenTelemetry traces), and confidence heat map
 
-An interviewer watching this demo sees: protocol-native architecture (MCP + A2A), multi-agent coordination with explicit planning, reflection at every stage, three-tier memory in action, full observability, and a real-world scenario that matters.
+An interviewer watching this demo sees: protocol-native architecture (MCP + A2A), multi-agent coordination with explicit planning, reflection at every stage, three-tier memory in action, full observability, polyglot Rust/Python design, and a real-world scenario that matters.
 
 ---
 
 ## Data Sources (Open & Free)
 
-All sources are implemented as MCP servers — standardized, pluggable, and independently testable.
+All sources are implemented as **Rust MCP servers** — standardized, pluggable, and independently testable.
 
-
-| Category             | MCP Server         | Sources                                        |
-| -------------------- | ------------------ | ---------------------------------------------- |
-| Financial markets    | `mcp-market-data`  | Yahoo Finance, FRED, Alpha Vantage (free tier) |
-| Corporate filings    | `mcp-edgar`        | SEC EDGAR full-text search + filing API        |
-| Geopolitical events  | `mcp-geopolitical` | GDELT, ACLED, RSS feeds (Reuters, AP)          |
-| Government / policy  | `mcp-gov`          | UN, WTO, government press releases             |
-| Trade & supply chain | `mcp-trade`        | UN Comtrade, WTO datasets, BIS, USITC          |
-| Macro indicators     | `mcp-macro`        | World Bank Open Data, IMF, OECD, BLS           |
-
+| Category | MCP Server (Rust crate) | Sources |
+|----------|------------------------|---------|
+| Financial markets | `mcp-market-data` | Yahoo Finance, FRED, Alpha Vantage (free tier) |
+| Corporate filings | `mcp-edgar` | SEC EDGAR full-text search + filing API |
+| Geopolitical events | `mcp-geopolitical` | GDELT, ACLED, RSS feeds (Reuters, AP) |
+| Government / policy | `mcp-gov` | UN, WTO, government press releases |
+| Trade & supply chain | `mcp-trade` | UN Comtrade, WTO datasets, BIS, USITC |
+| Macro indicators | `mcp-macro` | World Bank Open Data, IMF, OECD, BLS |
 
 All sources must be publicly accessible with no API key required, or free-tier API keys only.
 
@@ -236,24 +254,23 @@ All sources must be publicly accessible with no API key required, or free-tier A
 
 ## Tech Stack
 
-
-| Layer               | Tool                          | Role                                                                                |
-| ------------------- | ----------------------------- | ----------------------------------------------------------------------------------- |
-| Agent orchestration | LangGraph                     | DAG-based workflow coordination, state management, conditional routing, retry logic |
-| Agent construction  | BeeAI                         | Individual agent logic, Granite-native tool calling                                 |
-| Agent communication | A2A Protocol (v1.0)           | Inter-agent discovery, task delegation, structured result exchange                  |
-| Tool connectivity   | MCP                           | Standardized agent-to-data-source interface                                         |
-| LLM                 | IBM Granite 4.1 8B via Ollama | Apache 2.0, Q4 quantized for 6GB VRAM                                               |
-| Embeddings          | Granite Embedding English R2  | Vector generation for semantic memory                                               |
-| Semantic memory     | ChromaDB                      | Vector storage and retrieval                                                        |
-| Episodic memory     | SQLite (SQLModel)             | Briefing history, alert history, execution logs                                     |
-| Doc processing      | Docling                       | PDF/filing parsing and chunking                                                     |
-| Task scheduling     | APScheduler                   | Cron-based briefings and watch loops                                                |
-| Web UI              | Streamlit                     | Dashboard — briefings, Q&A, alerts, agent status, execution traces                  |
-| CLI                 | Typer                         | Terminal-based query, alert monitoring, quick commands                              |
-| Data fetching       | httpx + feedparser            | Per-MCP-server adapters                                                             |
-| Observability       | OpenTelemetry                 | Full trace of every agent decision, plan execution, and data retrieval              |
-
+| Layer | Tool | Language | Role |
+|-------|------|----------|------|
+| MCP servers | reqwest, serde, tokio, axum | Rust | Data source adapters — HTTP fetching, JSON parsing, MCP protocol |
+| Data ingestion | Custom pipeline | Rust | Document chunking, tokenization, batch embedding |
+| Embedding service | Custom wrapper | Rust | Vector generation via Ollama REST API |
+| Agent orchestration | LangGraph | Python | DAG-based workflow coordination, state management, conditional routing, retry logic |
+| Agent construction | BeeAI | Python | Individual agent logic, Granite-native tool calling |
+| Agent communication | A2A Protocol (v1.0) | Python | Inter-agent discovery, task delegation, structured result exchange |
+| LLM | IBM Granite 4.1 8B via Ollama | — | Apache 2.0, Q4 quantized for 6GB VRAM |
+| Embeddings | Granite Embedding English R2 | — | Vector generation for semantic memory |
+| Semantic memory | ChromaDB | Python | Vector storage and retrieval |
+| Episodic memory | SQLite (SQLModel) | Python | Briefing history, alert history, execution logs |
+| Doc processing | Docling | Python | PDF/filing parsing (feeds into Rust ingestion pipeline) |
+| Task scheduling | APScheduler | Python | Cron-based briefings and watch loops |
+| Web UI | Streamlit | Python | Dashboard — briefings, Q&A, alerts, agent status, execution traces |
+| CLI | Typer | Python | Terminal-based query, alert monitoring, quick commands |
+| Observability | OpenTelemetry | Both | Full trace of every agent decision, plan execution, and data retrieval |
 
 Stack can evolve. If a tool isn't working, flag it and we'll swap.
 
@@ -282,12 +299,36 @@ The Streamlit dashboard includes an **execution trace view** where the user can 
 
 ```
 atlas/
-├── agents/                         ← Agent definitions
-│   ├── base.py                     ← Common agent pattern (plan → execute → reflect)
+├── rust/                               ← Rust workspace (MCP servers + data layer)
+│   ├── Cargo.toml                      ← Workspace root
+│   ├── ollama-check/                   ← Ollama health check (Phase 0 Rust verification)
+│   │   ├── Cargo.toml
+│   │   └── src/main.rs
+│   ├── mcp-market-data/                ← Yahoo Finance, FRED, Alpha Vantage MCP server
+│   │   ├── Cargo.toml
+│   │   └── src/main.rs
+│   ├── mcp-edgar/                      ← SEC EDGAR MCP server
+│   │   ├── Cargo.toml
+│   │   └── src/main.rs
+│   ├── mcp-geopolitical/               ← GDELT, ACLED, RSS MCP server
+│   │   ├── Cargo.toml
+│   │   └── src/main.rs
+│   ├── mcp-trade/                      ← UN Comtrade, WTO, BIS MCP server
+│   │   ├── Cargo.toml
+│   │   └── src/main.rs
+│   ├── mcp-macro/                      ← World Bank, IMF, OECD MCP server
+│   │   ├── Cargo.toml
+│   │   └── src/main.rs
+│   └── mcp-gov/                        ← Government releases, UN/WTO docs MCP server
+│       ├── Cargo.toml
+│       └── src/main.rs
+│
+├── agents/                             ← Agent definitions (Python)
+│   ├── base.py                         ← Common agent pattern (plan → execute → reflect)
 │   ├── market/
-│   │   ├── agent.py                ← Market Intelligence Agent
-│   │   ├── tools.py                ← Agent-specific tool definitions
-│   │   └── agent_card.json         ← A2A capability advertisement
+│   │   ├── agent.py                    ← Market Intelligence Agent
+│   │   ├── tools.py                    ← Agent-specific tool definitions
+│   │   └── agent_card.json             ← A2A capability advertisement
 │   ├── geopolitical/
 │   │   ├── agent.py
 │   │   ├── tools.py
@@ -301,108 +342,108 @@ atlas/
 │   │   ├── tools.py
 │   │   └── agent_card.json
 │   ├── synthesis/
-│   │   ├── agent.py                ← Orchestrator with DAG planner
-│   │   ├── planner.py              ← Explicit plan generation and evaluation
+│   │   ├── agent.py                    ← Orchestrator with DAG planner
+│   │   ├── planner.py                  ← Explicit plan generation and evaluation
 │   │   └── agent_card.json
 │   └── guardian/
-│       ├── agent.py                ← Second-pass validator
+│       ├── agent.py                    ← Second-pass validator
 │       └── agent_card.json
 │
 ├── protocols/
-│   ├── a2a/                        ← A2A protocol implementation
-│   │   ├── server.py               ← A2A HTTP/JSON-RPC server
-│   │   ├── client.py               ← A2A client for agent-to-agent calls
-│   │   └── discovery.py            ← Agent Card registry and discovery
-│   └── mcp/                        ← MCP server implementations
-│       ├── market_data.py          ← Yahoo Finance, FRED, Alpha Vantage
-│       ├── edgar.py                ← SEC EDGAR
-│       ├── geopolitical.py         ← GDELT, ACLED, RSS
-│       ├── trade.py                ← UN Comtrade, WTO, BIS
-│       ├── macro.py                ← World Bank, IMF, OECD
-│       └── gov.py                  ← Government releases, UN/WTO docs
+│   ├── a2a/                            ← A2A protocol implementation (Python)
+│   │   ├── server.py                   ← A2A HTTP/JSON-RPC server
+│   │   ├── client.py                   ← A2A client for agent-to-agent calls
+│   │   └── discovery.py                ← Agent Card registry and discovery
+│   └── mcp/                            ← MCP client utilities (Python)
+│       └── client.py                   ← Python MCP client for connecting to Rust MCP servers
 │
 ├── orchestration/
-│   ├── graph.py                    ← LangGraph workflow definitions
-│   ├── state.py                    ← Shared state schemas
-│   └── router.py                   ← Query routing and plan dispatch
+│   ├── graph.py                        ← LangGraph workflow definitions
+│   ├── state.py                        ← Shared state schemas
+│   └── router.py                       ← Query routing and plan dispatch
 │
 ├── memory/
-│   ├── semantic.py                 ← ChromaDB interface (long-term knowledge)
-│   ├── episodic.py                 ← SQLite interface (historical events/logs)
-│   └── working.py                  ← Per-query scratchpad management
+│   ├── semantic.py                     ← ChromaDB interface (long-term knowledge)
+│   ├── episodic.py                     ← SQLite interface (historical events/logs)
+│   └── working.py                      ← Per-query scratchpad management
 │
 ├── ingestion/
-│   ├── pipeline.py                 ← Document loading, chunking, embedding
-│   └── schedulers.py               ← Cron jobs for periodic data pulls
+│   ├── pipeline.py                     ← Python orchestration of Rust ingestion service
+│   └── schedulers.py                   ← Cron jobs for periodic data pulls
 │
 ├── services/
-│   ├── llm.py                      ← Ollama / Granite wrapper
-│   └── embeddings.py               ← Embedding service
+│   ├── llm.py                          ← Ollama / Granite wrapper
+│   └── embeddings.py                   ← Embedding service
 │
 ├── observability/
-│   ├── tracing.py                  ← OpenTelemetry setup and span definitions
-│   └── exporters.py                ← Trace export config (Jaeger, console, file)
+│   ├── tracing.py                      ← OpenTelemetry setup and span definitions
+│   └── exporters.py                    ← Trace export config (Jaeger, console, file)
 │
 ├── ui/
-│   ├── streamlit_app.py            ← Web dashboard entry point
+│   ├── streamlit_app.py                ← Web dashboard entry point
 │   └── pages/
-│       ├── briefings.py            ← Scheduled briefing viewer
-│       ├── query.py                ← Natural language Q&A interface
-│       ├── alerts.py               ← Real-time alert feed
-│       ├── agent_status.py         ← Agent health and capability view
-│       └── trace_viewer.py         ← Execution trace and reasoning chain explorer
+│       ├── briefings.py                ← Scheduled briefing viewer
+│       ├── query.py                    ← Natural language Q&A interface
+│       ├── alerts.py                   ← Real-time alert feed
+│       ├── agent_status.py             ← Agent health and capability view
+│       └── trace_viewer.py             ← Execution trace and reasoning chain explorer
 │
 ├── cli/
-│   └── main.py                     ← Typer CLI for queries, alerts, status
+│   └── main.py                         ← Typer CLI for queries, alerts, status
 │
 ├── data/
-│   ├── sample_scenarios/           ← Demo scenario data (Taiwan Strait, etc.)
-│   └── seed_data/                  ← Initial knowledge base seeding
+│   ├── sample_scenarios/               ← Demo scenario data (Taiwan Strait, etc.)
+│   └── seed_data/                      ← Initial knowledge base seeding
 │
 ├── docs/
-│   ├── DEVLOG.md                   ← Step-by-step dev log + ADRs
-│   ├── ARCHITECTURE.md             ← System design, protocol decisions
-│   ├── AGENTS.md                   ← Agent specs, reflection patterns, Agent Cards
-│   ├── PROTOCOLS.md                ← MCP + A2A implementation details
-│   ├── DATA_SOURCES.md             ← Source documentation and schemas
-│   ├── MEMORY.md                   ← Three-tier memory architecture
-│   └── DEMO_SCRIPT.md             ← Step-by-step demo walkthrough
+│   ├── DEVLOG.md                       ← Step-by-step dev log + ADRs
+│   ├── ARCHITECTURE.md                 ← System design, protocol decisions, language boundary
+│   ├── AGENTS.md                       ← Agent specs, reflection patterns, Agent Cards
+│   ├── PROTOCOLS.md                    ← MCP + A2A implementation details
+│   ├── DATA_SOURCES.md                 ← Source documentation and schemas
+│   ├── MEMORY.md                       ← Three-tier memory architecture
+│   └── DEMO_SCRIPT.md                  ← Step-by-step demo walkthrough
 │
 ├── tests/
-│   ├── agents/                     ← Per-agent unit tests
-│   ├── protocols/                  ← MCP server and A2A protocol tests
-│   ├── memory/                     ← Memory tier tests
-│   └── integration/                ← End-to-end scenario tests
+│   ├── agents/                         ← Per-agent unit tests (Python)
+│   ├── protocols/                      ← MCP server and A2A protocol tests
+│   ├── memory/                         ← Memory tier tests
+│   └── integration/                    ← End-to-end scenario tests
 │
-├── compose.yml                     ← Local multi-service setup
+├── examples/                           ← Phase 0 hello world scripts (Python)
+│   ├── langgraph_hello.py
+│   └── beeai_hello.py
+│
+├── scripts/                            ← Utility scripts (Python)
+│   └── verify_ollama.py
+│
+├── compose.yml                         ← Local multi-service setup (Rust + Python)
+├── pyproject.toml                      ← Python project config
 ├── .env.example
 └── README.md
-
 ```
 
 ---
 
 ## Build Phases
 
-
-| Phase | Focus                    | Outcome                                                                                                        | Key Decisions                               |
-| ----- | ------------------------ | -------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
-| 0     | Environment setup        | Ollama + Granite running, LangGraph + BeeAI installed, project scaffolded                                      | ADR: LangGraph vs pure BeeAI orchestration  |
-| 1     | MCP foundation           | First MCP server (Yahoo Finance) operational, returns structured data                                          | ADR: MCP server implementation pattern      |
-| 2     | Single agent PoC         | Market Intelligence Agent can ingest via MCP, embed to ChromaDB, answer queries with self-reflection           | ADR: Reflection loop depth and retry limits |
-| 3     | A2A protocol layer       | A2A server running, Agent Cards published, two agents can discover and delegate tasks                          | ADR: A2A transport choice (HTTP vs gRPC)    |
-| 4     | Multi-agent coordination | Add Geopolitical + Supply Chain agents, Synthesis Agent routes between them via A2A with explicit plan objects | ADR: Plan object schema                     |
-| 5     | Memory architecture      | Three-tier memory operational — semantic (ChromaDB), episodic (SQLite), working (in-context)                   | ADR: Episodic memory schema design          |
-| 6     | Research & Filing Agent  | SEC EDGAR MCP server, document processing pipeline, filing diff detection                                      |                                             |
-| 7     | Guardian Agent           | Second-pass validation, confidence scoring, hallucination detection against source data                        | ADR: Confidence threshold calibration       |
-| 8     | Scheduled briefings      | APScheduler cron jobs, briefing templates, episodic memory logging                                             |                                             |
-| 9     | Real-time alerts         | Watch loops on MCP servers, threshold detection, multi-agent alert assembly                                    |                                             |
-| 10    | Observability            | Full OpenTelemetry tracing across all agents, plans, and protocol calls                                        | ADR: Trace storage and retention            |
-| 11    | CLI interface            | Typer-based terminal Q&A, alert stream, agent status                                                           |                                             |
-| 12    | Web dashboard            | Streamlit UI — briefings, Q&A, alerts, agent status, trace viewer                                              |                                             |
-| 13    | Demo scenario            | Taiwan Strait scenario fully wired, seed data loaded, demo script written                                      |                                             |
-| 14    | Polish & presentation    | README, documentation, code cleanup, commit history, walkthrough rehearsal                                     |                                             |
-
+| Phase | Focus | Outcome | Key Decisions |
+|-------|-------|---------|---------------|
+| 0 | Environment setup | Ollama + Granite running, LangGraph + BeeAI installed, Rust toolchain installed, project scaffolded, Rust Ollama health check binary working | ADR: LangGraph vs pure BeeAI orchestration; ADR: Hybrid Rust/Python architecture |
+| 1 | MCP foundation | First MCP server (Yahoo Finance) operational **in Rust**, returns structured data, Python agent can connect as MCP client | ADR: MCP server implementation pattern (Rust) |
+| 2 | Single agent PoC | Market Intelligence Agent (Python) can ingest via Rust MCP server, embed to ChromaDB, answer queries with self-reflection | ADR: Reflection loop depth and retry limits |
+| 3 | A2A protocol layer | A2A server running, Agent Cards published, two agents can discover and delegate tasks | ADR: A2A transport choice (HTTP vs gRPC) |
+| 4 | Multi-agent coordination | Add Geopolitical + Supply Chain agents, Synthesis Agent routes between them via A2A with explicit plan objects | ADR: Plan object schema |
+| 5 | Memory architecture | Three-tier memory operational — semantic (ChromaDB), episodic (SQLite), working (in-context) | ADR: Episodic memory schema design |
+| 6 | Research & Filing Agent | SEC EDGAR Rust MCP server, document processing pipeline, filing diff detection | |
+| 7 | Guardian Agent | Second-pass validation, confidence scoring, hallucination detection against source data | ADR: Confidence threshold calibration |
+| 8 | Scheduled briefings | APScheduler cron jobs, briefing templates, episodic memory logging | |
+| 9 | Real-time alerts | Watch loops on MCP servers, threshold detection, multi-agent alert assembly | |
+| 10 | Observability | Full OpenTelemetry tracing across all agents, plans, and protocol calls | ADR: Trace storage and retention |
+| 11 | CLI interface | Typer-based terminal Q&A, alert stream, agent status | |
+| 12 | Web dashboard | Streamlit UI — briefings, Q&A, alerts, agent status, trace viewer | |
+| 13 | Demo scenario | Taiwan Strait scenario fully wired, seed data loaded, demo script written | |
+| 14 | Polish & presentation | README, documentation, code cleanup, commit history, walkthrough rehearsal | |
 
 Phases are sequential by default but can be reordered if priorities shift. Each phase produces something runnable and testable — no big-bang integration at the end.
 
@@ -410,22 +451,23 @@ Phases are sequential by default but can be reordered if priorities shift. Each 
 
 ## Development Environment
 
-
-| Spec | Value                        |
-| ---- | ---------------------------- |
-| OS   | Windows 11 (WSL2)            |
-| CPU  | AMD Ryzen 7 5800H (8c/16t)   |
-| RAM  | 16 GB                        |
-| GPU  | NVIDIA RTX 3060 6GB VRAM     |
-| LLM  | Granite 4.1 8B Q4 via Ollama |
-
+| Spec | Value |
+|------|-------|
+| OS | Windows 11 (WSL2) |
+| CPU | AMD Ryzen 7 5800H (8c/16t) |
+| RAM | 16 GB |
+| GPU | NVIDIA RTX 3060 6GB VRAM |
+| LLM | Granite 4.1 8B Q4 via Ollama |
+| Python | 3.12+ (venv) |
+| Rust | stable toolchain via rustup |
 
 **Hardware-aware design constraints:**
 
 - 6GB VRAM = one model loaded at a time. Agents serialize through Ollama. Design agent workflows to minimize redundant LLM calls.
-- 16GB RAM is tight with all services running. Embedding generation should be batched during ingestion, not on-the-fly during queries.
+- 16GB RAM is tight with all services running. Embedding generation should be batched during ingestion, not on-the-fly during queries. Rust MCP servers help here — 5-20MB each vs 100-200MB for Python equivalents.
 - Agent reflection loops add LLM calls — keep reflection prompts short and set retry limits (default: 2 retries per agent per task).
-- For demo day: consider a cloud GPU instance (Lambda Labs, [Vast.ai](http://Vast.ai)) to run everything simultaneously without resource contention.
+- Rust compile times: initial builds ~2-5 min, incremental builds ~5-15 sec. Use `cargo check` during development, `cargo build --release` for benchmarks/demo.
+- For demo day: consider a cloud GPU instance (Lambda Labs, Vast.ai) to run everything simultaneously without resource contention.
 
 ---
 
@@ -436,8 +478,9 @@ Phases are sequential by default but can be reordered if priorities shift. Each 
 - **Build incrementally.** Every phase should produce something runnable and demoable. No big-bang integration at the end.
 - **Assume I'm using Cursor for code execution** — give me code I can implement step by step in Agent mode with this doc as context.
 - **Keep explanations tight.** I have an ISyE background, McKinsey consulting experience, and hands-on ML/LLM skills. Don't over-explain fundamentals, but do explain non-obvious architectural choices.
+- **I'm learning Rust.** Explain Rust idioms and patterns when they come up. Don't assume Rust fluency — I'm building this partly to learn the language. Python is my strong side.
 - **Portfolio-quality matters.** Code should be clean, documented, and structured well enough that a hiring manager or technical interviewer can read it. README, docstrings, and clear commit history are not afterthoughts.
 - **Protocol implementation is the differentiator.** MCP and A2A are what set Atlas apart from generic agent projects. Get these right and everything else follows.
+- **The language boundary is the second differentiator.** Rust MCP servers + Python agents is what separates this from every other LangGraph project.
 - **The demo tells a story.** Every architectural decision should be visible in the Taiwan Strait demo scenario. If a feature can't be demonstrated, question whether it belongs in this phase.
 - **This relates to but is separate from Enterprise Profiler.** They share some stack (Granite, ChromaDB, BeeAI, Docling) but are independent projects with different goals. Cross-pollinate ideas where it makes sense but don't couple them.
-

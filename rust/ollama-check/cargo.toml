@@ -1,0 +1,15 @@
+[package]
+name = "ollama-check"
+version = "0.1.0"
+edition = "2021"
+description = "Verify local Ollama is running and Granite 4.1 8B responds"
+
+[[bin]]
+name = "ollama-check"
+path = "src/main.rs"
+
+[dependencies]
+reqwest = { version = "0.12", features = ["json"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
