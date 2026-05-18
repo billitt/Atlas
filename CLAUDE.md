@@ -2,7 +2,7 @@
 
 This file is maintained by Cursor after each phase. Claude reads it to understand the codebase without re-reading every file. **Cursor: update this file at the end of every phase.**
 
-Last updated: Phase 6 (2026-05-17)
+Last updated: Phase 7 (2026-05-17)
 
 ---
 
@@ -10,11 +10,11 @@ Last updated: Phase 6 (2026-05-17)
 
 | Metric | Value |
 |--------|-------|
-| Commits | 14 |
-| Total files | 81 |
+| Commits | 15 |
+| Total files | 87 |
 | Rust LOC | 959 |
-| Python LOC | 2,359 |
-| Phases complete | 0, 1A, 1B, 2, 3, 4, 5, 6 |
+| Python LOC | 2,646 |
+| Phases complete | 0, 1A, 1B, 2, 3, 4, 5, 6, 7 |
 
 ---
 
@@ -45,6 +45,9 @@ User query
           -> Granite via Ollama (services/llm.py)
       -> Synthesis Agent queries Episodic Memory for similar briefings
       -> Granite synthesizes unified briefing
+      -> Guardian Agent validates grounding and confidence (agents/guardian/agent.py)
+        -> If LOW confidence and guardian_retries <= 1, route back to synthesize
+        -> Otherwise attach guardian_verdict and continue
       -> Run Logger writes runs/YYYYMMDD_HHMMSS.json
       -> Episodic Memory writes BriefingRecord
 
@@ -165,7 +168,7 @@ Memory tiers:
 - Helper: `_chunk_text(text: str, *, max_chars: int = 1200, overlap: int = 150) -> list[str]`
 - Dependencies: `chromadb.PersistentClient`, `services.embeddings.embed_texts`.
 
-**memory/episodic.py** (157 lines)
+**memory/episodic.py** (138 lines)
 - SQLite + SQLModel episodic memory.
 - DB path: `data/sqlite/atlas_episodic.db`.
 - Tables:
@@ -181,6 +184,7 @@ Memory tiers:
 - `query_briefings_by_date(start: datetime, end: datetime) -> list[BriefingRecord]`
 - `get_confidence_history(topic: str, days: int = 90) -> list[dict[str, Any]]`
 - `briefing_count() -> int`
+- Phase 7: `log_briefing()` appends `guardian_verdict` into the existing `agent_results` JSON list as `{"agent": "guardian", "verdict": ...}` instead of adding a new column, avoiding SQLite migration churn during local demos.
 
 **memory/working.py** (30 lines)
 - Per-query scratchpad.
@@ -306,38 +310,67 @@ Memory tiers:
   - `filing_diff`
 - Loaded by: `protocols.a2a.discovery.load_cards("agents")`, `examples/synthesis_demo.py`, `A2AServer`.
 
-**agents/synthesis/planner.py**
+**agents/guardian/agent.py** (140 lines)
+- Second-pass validator. Does not extend `BaseAgent`.
+- Type aliases/classes:
+  - `Confidence = Literal["HIGH", "MEDIUM", "LOW"]`
+  - `class ClaimCheck(TypedDict)`: `claim`, `grounded`, `source`, `confidence`, `issue`
+  - `class GuardianVerdict(TypedDict)`: `passed`, `overall_confidence`, `claim_checks`, `flags`, `summary`
+  - `class GuardianAgent`
+- `GuardianAgent.validate(query: str, briefing: dict[str, Any], agent_results: list[dict[str, Any]], sources: list[dict[str, Any]]) -> GuardianVerdict`
+- `_parse_json_from_llm(text: str) -> dict[str, Any]`
+- `_normalize_verdict(parsed: dict[str, Any]) -> GuardianVerdict`
+- `_normalize_check(check: dict[str, Any]) -> ClaimCheck`
+- `_normalize_confidence(value: Any) -> Confidence`
+- `_fallback_verdict(message: str) -> GuardianVerdict`
+- Dependencies: `services.llm.chat`, `json`, `re`, `datetime`, `typing`.
+- Called by: `orchestration/graph.py::guardian_node`, `examples/guardian_demo.py`.
+- Behavior: one Granite call validates claims, grounding, source freshness, speculative language, and per-claim/overall confidence; it flags issues but does not rewrite content.
+
+**agents/guardian/agent_card.json** (22 lines)
+- A2A Agent Card for future Guardian endpoint.
+- URL: `http://localhost:9005`.
+- Skills:
+  - `validate`
+  - `confidence_score`
+- Loaded by: `protocols.a2a.discovery.load_cards("agents")`; filtered out of specialist plans by `agents/synthesis/planner.py`.
+
+**agents/synthesis/planner.py** (129 lines)
 - `create_execution_plan(query: str, agent_cards: list[dict[str, Any]]) -> dict[str, Any]`
 - `agent_key(card: dict[str, Any]) -> str`
 - Produces DAG-shaped plan: `{"steps": [{"agent", "task", "depends_on"}], "rationale"}`.
 - Phase 6 routing: `agent_key()` maps Research & Filing Agent to `research`; prompt and fallback include Research for filings, earnings, SEC data, risk factors, annual reports, 10-K/10-Q, and company-specific financial details.
+- Phase 7 routing: `agent_key()` maps Guardian Agent to `guardian`; Guardian steps are removed from specialist execution plans because Guardian runs as a graph quality gate.
 
-**agents/synthesis/agent.py** (188 lines)
+**agents/synthesis/agent.py** (172 lines)
 - `class SynthesisAgent`
 - `__init__(agent_cards: list[dict[str, Any]], *, a2a_client: A2AClient | None = None, episodic_memory: EpisodicMemory | None = None) -> None`
 - `plan(query: str) -> dict[str, Any]`
 - `delegate(plan: dict[str, Any]) -> list[dict[str, Any]]`
-- `synthesize(query: str, plan: dict[str, Any], agent_results: list[dict[str, Any]]) -> dict[str, Any]`
+- `synthesize(query: str, plan: dict[str, Any], agent_results: list[dict[str, Any]], *, guardian_feedback: dict[str, Any] | None = None) -> dict[str, Any]`
 - `run(query: str) -> dict[str, Any]`
 - Queries episodic memory for similar briefings and logs new briefing records.
+- Uses Guardian feedback on retry to remove unsupported claims and avoid inventing evidence.
 
 ### Orchestration
 
-**orchestration/state.py**
+**orchestration/state.py** (34 lines)
 - `class SynthesisState(TypedDict, total=False)`
-- Fields: `messages`, `query`, `agent_cards`, `plan`, `agent_results`, `sources`, `combined_analysis`, `confidence`, `briefing`.
+- Fields: `messages`, `query`, `agent_cards`, `plan`, `agent_results`, `sources`, `combined_analysis`, `confidence`, `briefing`, `guardian_verdict`, `guardian_retries`.
 - Reducers: `add_messages`, `merge_agent_results`, `merge_sources`.
 
-**orchestration/graph.py**
-- `build_synthesis_graph(agent: SynthesisAgent)`
-- LangGraph DAG: `START -> plan -> delegate_to_agents -> synthesize -> END`.
+**orchestration/graph.py** (99 lines)
+- `build_synthesis_graph(agent: SynthesisAgent, *, guardian: GuardianAgent | None = None, max_guardian_retries: int = 1)`
+- LangGraph DAG: `START -> plan -> delegate_to_agents -> synthesize -> guardian -> END`.
+- Conditional retry: `guardian` routes back to `synthesize` once when `guardian_verdict.overall_confidence == "LOW"`.
+- Internal nodes: `plan_node`, `delegate_to_agents_node`, `synthesize_node`, `guardian_node`, `guardian_route`.
 
 ### Observability
 
-**observability/run_logger.py** (34 lines)
+**observability/run_logger.py** (28 lines)
 - `save_run(run_data: dict[str, Any]) -> Path`
 - Writes `runs/YYYYMMDD_HHMMSS.json`.
-- Payload keys: `timestamp`, `query`, `execution_plan`, `agent_results`, `sources`, `confidence`, `final_briefing`, `duration_seconds`, `memory_stats`.
+- Payload keys: `timestamp`, `query`, `execution_plan`, `agent_results`, `sources`, `confidence`, `final_briefing`, `guardian_verdict`, `duration_seconds`, `memory_stats`.
 
 ### Examples / Scripts
 
@@ -345,7 +378,7 @@ Memory tiers:
 - `main() -> None`
 - Proves semantic, episodic, and working memory independently.
 
-**examples/synthesis_demo.py** (152 lines)
+**examples/synthesis_demo.py** (178 lines)
 - Starts A2A servers on `9001`, `9002`, `9003`, `9004`.
 - Runs LangGraph synthesis flow.
 - Saves JSON run artifact and SQLite briefing record.
@@ -357,10 +390,16 @@ Memory tiers:
 - Connects to `DEFAULT_EDGAR_MCP_URL`, lists EDGAR tools, fetches AAPL filings, fetches one 10-K/10-Q text payload, and runs `ResearchFilingAgent`.
 - Dependencies: `agents.research.agent`, `agents.research.tools`, `protocols.mcp.client.McpClient`.
 
+**examples/guardian_demo.py** (39 lines)
+- Standalone Phase 7 demo for Guardian validation.
+- `def main() -> None`
+- Builds a fake briefing with one grounded claim and one fabricated claim, then calls `GuardianAgent.validate()`.
+- Dependencies: `agents.guardian.agent.GuardianAgent`, `json`, `sys`.
+
 Other demos:
 - `scripts/verify_ollama.py`
 - `examples/langgraph_hello.py`
-- `examples/beeai_hello.py`
+- `examples/beeai_hello.py` — Phase 0 framework verification only; production agents use `BaseAgent`, not BeeAI.
 - `examples/market_agent_demo.py`
 - `examples/a2a_demo.py`
 
@@ -369,7 +408,8 @@ Other demos:
 **pyproject.toml**
 - Packages: `services`, `examples`, `scripts`, `protocols`, `agents`, `orchestration`, `memory`, `observability`.
 - Dependencies include: `langgraph`, `langchain-ollama`, `beeai-framework`, `a2a-sdk`, `mcp`, `httpx`, `chromadb`, `sqlmodel`, `python-dotenv`.
-- Scripts include: `atlas-memory-demo`, `atlas-synthesis-demo`, `atlas-edgar-demo`.
+- `beeai-framework` is retained because `examples/beeai_hello.py` imports it; Atlas production agents use the custom `BaseAgent` pattern.
+- Scripts include: `atlas-memory-demo`, `atlas-synthesis-demo`, `atlas-edgar-demo`, `atlas-guardian-demo`.
 
 **.env.example**
 - `OLLAMA_BASE_URL=http://localhost:11434`
@@ -385,7 +425,8 @@ Other demos:
 ## Phase Changelog
 
 ### Phase 0 — Environment Setup
-- Python venv, Ollama + Granite, LangGraph and BeeAI hello worlds.
+- Python venv, Ollama + Granite, LangGraph hello world, and BeeAI hello-world evaluation.
+- BeeAI was evaluated but deferred for production agents; specialist agents use the custom `BaseAgent` `plan -> execute -> reflect` pattern.
 
 ### Phase 1A — Rust ollama-check
 - Rust workspace and `ollama-check` binary.
@@ -440,6 +481,22 @@ Other demos:
 - Modified `pyproject.toml` to add `atlas-edgar-demo`.
 - Verification: `cargo check -p mcp-edgar`, Ruff check, `examples/edgar_demo.py`, and full four-agent `examples/synthesis_demo.py` all completed successfully.
 
+### Phase 7 — Guardian Agent
+- Created `agents/guardian/agent.py` with `GuardianAgent`, `GuardianVerdict`, `ClaimCheck`, one-call Granite validation, JSON parsing, verdict normalization, and malformed-JSON fallback.
+- Created `agents/guardian/agent_card.json` for future Guardian A2A endpoint on `:9005`.
+- Modified `agents/guardian/__init__.py` to export Guardian types/classes.
+- Created `examples/guardian_demo.py` with one grounded claim and one fabricated claim.
+- Modified `orchestration/graph.py` to run `guardian` after `synthesize` and route back to `synthesize` once on `LOW` confidence.
+- Modified `orchestration/state.py` to add `guardian_verdict` and `guardian_retries`.
+- Modified `agents/synthesis/agent.py` to accept `guardian_feedback` during retry.
+- Modified `agents/synthesis/planner.py` to filter Guardian out of specialist execution plans.
+- Modified `examples/synthesis_demo.py` to print Guardian claim checks, flags, pass/fail status, and save Guardian verdicts.
+- Modified `observability/run_logger.py` to persist `guardian_verdict`.
+- Modified `memory/episodic.py` to store Guardian verdicts inside the existing `agent_results` JSON payload.
+- Modified `pyproject.toml` to add `atlas-guardian-demo`.
+- Added ADR-007 in `docs/DEVLOG.md` for confidence calibration, Guardian separation of concerns, and retry policy.
+- Verification: Ruff check, `examples/guardian_demo.py`, and full Guardian-enabled `examples/synthesis_demo.py` completed successfully.
+
 ---
 
 ## Dependencies Between Files
@@ -467,6 +524,8 @@ examples/synthesis_demo.py
     -> memory/episodic.py
   -> orchestration/graph.py
     -> orchestration/state.py
+    -> agents/guardian/agent.py -> services/llm.py
+      -> guardian_verdict attached to final briefing
   -> observability/run_logger.py
 
 examples/memory_demo.py
@@ -480,6 +539,9 @@ examples/edgar_demo.py
   -> protocols/mcp/client.py -> Rust MCP server :8002
     -> rust/mcp-edgar/src/mcp.rs
       -> rust/mcp-edgar/src/edgar.rs -> SEC EDGAR APIs
+
+examples/guardian_demo.py
+  -> agents/guardian/agent.py -> services/llm.py
 ```
 
 ---
@@ -495,12 +557,12 @@ examples/edgar_demo.py
 | 9002 | A2A Geopolitical Agent | Started by demos |
 | 9003 | A2A Supply Chain Agent | Started by demos |
 | 9004 | A2A Research & Filing Agent | Started by demos |
+| 9005 | A2A Guardian Agent | Agent Card reserved; validation currently runs in graph |
 
 ---
 
 ## What's Stubbed / Not Yet Built
 
-- `agents/guardian/` — empty package only.
 - `ingestion/` — empty package only.
 - `ui/` — empty package only.
 - `cli/` — empty package only.
@@ -509,4 +571,4 @@ examples/edgar_demo.py
 - Rust MCP servers built: `mcp-market-data`, `mcp-edgar`; future MCP servers remain unbuilt.
 - Observability is minimal: JSON run logging exists, OpenTelemetry spans are not wired yet.
 
-`memory/` is no longer a stub as of Phase 5. `agents/research/` is no longer a stub as of Phase 6.
+`memory/` is no longer a stub as of Phase 5. `agents/research/` is no longer a stub as of Phase 6. `agents/guardian/` is no longer a stub as of Phase 7.

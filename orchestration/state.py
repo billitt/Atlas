@@ -43,3 +43,5 @@ class SynthesisState(TypedDict, total=False):
     combined_analysis: str
     confidence: str
     briefing: JsonDict
+    guardian_verdict: JsonDict
+    guardian_retries: int

@@ -12,6 +12,7 @@ from time import perf_counter
 import httpx
 
 from agents.geopolitical.agent import GeopoliticalRiskAgent
+from agents.guardian.agent import GuardianAgent
 from agents.market.agent import DEFAULT_MCP_URL, MarketIntelligenceAgent
 from agents.research.agent import DEFAULT_EDGAR_MCP_URL, ResearchFilingAgent
 from agents.supply_chain.agent import SupplyChainAgent
@@ -97,19 +98,25 @@ async def run() -> None:
         await wait_for_agent_cards(urls)
 
         registry = load_cards("agents")
-        agent_cards = registry.discover_all()
+        discovered_cards = registry.discover_all()
+        agent_cards = [
+            card
+            for card in discovered_cards
+            if "guardian" not in str(card.get("name", "")).lower()
+        ]
         episodic_memory = EpisodicMemory()
         semantic_memory = SemanticMemory()
         working_memory = WorkingMemory()
         working_memory.add("query", query)
-        working_memory.add("agent_card_count", len(agent_cards))
+        working_memory.add("agent_card_count", len(discovered_cards))
         print("Discovered local Agent Cards:")
-        for card in agent_cards:
+        for card in discovered_cards:
             skills = ", ".join(skill["id"] for skill in card.get("skills", []))
             print(f"  - {card['name']} at {card['url']} [{skills}]")
+        print("Guardian runs as an in-graph validator, not as a specialist delegate.")
 
         synthesis_agent = SynthesisAgent(agent_cards, episodic_memory=episodic_memory)
-        app = build_synthesis_graph(synthesis_agent)
+        app = build_synthesis_graph(synthesis_agent, guardian=GuardianAgent())
 
         started_at = datetime.now().isoformat(timespec="seconds")
         start_time = perf_counter()
@@ -120,6 +127,7 @@ async def run() -> None:
                 "agent_cards": agent_cards,
                 "agent_results": [],
                 "sources": [],
+                "guardian_retries": 0,
             }
         )
         duration_seconds = round(perf_counter() - start_time, 3)
@@ -139,6 +147,24 @@ async def run() -> None:
         print("\nPer-agent sources:")
         print(json.dumps(briefing["per_agent_sources"], indent=2))
 
+        guardian_verdict = briefing.get("guardian_verdict", {})
+        print("\nGuardian validation:")
+        print(f"  Overall confidence: {guardian_verdict.get('overall_confidence', 'LOW')}")
+        print(f"  Passed: {guardian_verdict.get('passed', False)}")
+        flags = guardian_verdict.get("flags", [])
+        if flags:
+            print("  Flags:")
+            for flag in flags:
+                print(f"    - {flag}")
+        claim_checks = guardian_verdict.get("claim_checks", [])
+        if claim_checks:
+            print("  Claim checks:")
+            for check in claim_checks[:8]:
+                status = "PASS" if check.get("grounded") else "FLAG"
+                print(f"    - {status} [{check.get('confidence')}]: {check.get('claim')}")
+                if check.get("issue"):
+                    print(f"      issue: {check.get('issue')}")
+
         run_data = {
             "timestamp": started_at,
             "query": query,
@@ -147,6 +173,7 @@ async def run() -> None:
             "sources": briefing["per_agent_sources"],
             "confidence": briefing["overall_confidence"],
             "final_briefing": briefing["combined_analysis"],
+            "guardian_verdict": guardian_verdict,
             "duration_seconds": duration_seconds,
             "memory_stats": {
                 "semantic_docs": semantic_memory.count(),

@@ -74,11 +74,27 @@ class SynthesisAgent:
 
         return results
 
-    def synthesize(self, query: str, plan: JsonDict, agent_results: list[JsonDict]) -> JsonDict:
+    def synthesize(
+        self,
+        query: str,
+        plan: JsonDict,
+        agent_results: list[JsonDict],
+        *,
+        guardian_feedback: JsonDict | None = None,
+    ) -> JsonDict:
         """Use Granite to merge specialist outputs into one briefing."""
         compact_results = [_compact_result(result) for result in agent_results]
         past_briefings = self.episodic_memory.query_briefings(query, limit=3)
         past_context = _format_past_briefings(past_briefings)
+        guardian_feedback_block = ""
+        if guardian_feedback:
+            guardian_feedback_block = f"""
+Previous Guardian validation flagged issues:
+{json.dumps(guardian_feedback, indent=2)}
+
+Revise the briefing to remove unsupported claims, label speculation clearly, and
+keep claims tied to specialist sources. Do not invent new evidence.
+"""
         prompt = f"""You are the Atlas Synthesis Agent.
 Create a unified intelligence briefing from specialist agent outputs.
 
@@ -93,9 +109,11 @@ Specialist results:
 
 Relevant past briefings from episodic memory:
 {past_context}
+{guardian_feedback_block}
 
 Instructions:
 - Merge the market, geopolitical, and supply-chain perspectives.
+- Include research/filing evidence when available.
 - Explicitly call out confidence differences and live-data limitations.
 - Resolve conflicts; if no direct conflict exists, say the outputs are complementary.
 - Keep the briefing grounded in the specialist artifacts.

@@ -25,6 +25,7 @@ def save_run(run_data: dict[str, Any]) -> Path:
         "sources": run_data.get("sources"),
         "confidence": run_data.get("confidence"),
         "final_briefing": run_data.get("final_briefing"),
+        "guardian_verdict": run_data.get("guardian_verdict", {}),
         "duration_seconds": run_data.get("duration_seconds"),
         "memory_stats": run_data.get("memory_stats", {}),
     }

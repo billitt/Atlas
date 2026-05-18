@@ -9,7 +9,7 @@ dependencies = [
     "langgraph>=0.4",
     "langchain-core>=0.3",
     "langchain-ollama>=0.3",
-    "beeai-framework>=0.1.79",
+    "beeai-framework>=0.1.79", #Phase 0 only
     # Protocols
     "a2a-sdk[http-server]>=1.0",
     "mcp[cli]>=1.27",
@@ -46,6 +46,7 @@ atlas-a2a-demo = "examples.a2a_demo:main"
 atlas-synthesis-demo = "examples.synthesis_demo:main"
 atlas-memory-demo = "examples.memory_demo:main"
 atlas-edgar-demo = "examples.edgar_demo:main"
+atlas-guardian-demo = "examples.guardian_demo:main"
 
 [build-system]
 requires = ["hatchling"]

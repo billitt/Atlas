@@ -58,11 +58,15 @@ class EpisodicMemory:
 
     def log_briefing(self, run_data: dict[str, Any]) -> BriefingRecord:
         timestamp = _parse_timestamp(run_data.get("timestamp"))
+        agent_results = list(run_data.get("agent_results") or [])
+        guardian_verdict = run_data.get("guardian_verdict")
+        if guardian_verdict:
+            agent_results.append({"agent": "guardian", "verdict": guardian_verdict})
         record = BriefingRecord(
             timestamp=timestamp,
             query=str(run_data.get("query", "")),
             plan=run_data.get("execution_plan") or run_data.get("plan") or {},
-            agent_results=run_data.get("agent_results") or [],
+            agent_results=agent_results,
             final_briefing=str(run_data.get("final_briefing", "")),
             confidence=str(run_data.get("confidence", "LOW")),
             sources=run_data.get("sources") or [],

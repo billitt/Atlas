@@ -36,6 +36,8 @@ Rules:
   geopolitical, supply_chain, and research agents.
 - Include the research agent for queries involving filings, earnings, SEC data,
   risk factors, annual reports, 10-K/10-Q, or company-specific financial details.
+- Do NOT include the Guardian Agent in the execution plan. Guardian validation
+  runs after synthesis as a LangGraph quality gate, not as a specialist delegate.
 - For the market step in Taiwan Strait semiconductor scenarios, ask for valid
   Yahoo symbols such as TSM, NVDA, ASML, SMH, SOXX, and SPY; avoid delisted or
   ambiguous tickers.
@@ -57,6 +59,9 @@ JSON schema:
 
     steps = plan.get("steps", [])
     if not isinstance(steps, list) or not steps:
+        return _fallback_plan(query, agent_cards)
+    plan["steps"] = [step for step in steps if step.get("agent") != "guardian"]
+    if not plan["steps"]:
         return _fallback_plan(query, agent_cards)
     return plan
 
@@ -86,11 +91,14 @@ def agent_key(card: JsonDict) -> str:
         return "supply_chain"
     if "research" in name or "filing" in name:
         return "research"
+    if "guardian" in name:
+        return "guardian"
     return re.sub(r"[^a-z0-9]+", "_", name).strip("_") or "agent"
 
 
 def _fallback_plan(query: str, agent_cards: list[JsonDict]) -> JsonDict:
     available = {agent_key(card) for card in agent_cards}
+    available.discard("guardian")
     preferred = ["geopolitical", "supply_chain", "research", "market"]
     steps = [
         {

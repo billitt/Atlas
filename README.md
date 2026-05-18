@@ -14,7 +14,7 @@ Phases **0-4 are implemented and demo-verified**.
 
 | Phase | Status | What Works |
 |-------|--------|------------|
-| 0 | Complete | Python environment, Ollama, Granite, LangGraph, BeeAI hello worlds |
+| 0 | Complete | Python environment, Ollama, Granite, LangGraph hello world, BeeAI evaluated via hello world |
 | 1A | Complete | Rust `ollama-check` binary verifies local Ollama + Granite |
 | 1B | Complete | Rust MCP market-data server serves Yahoo Finance quotes on port `8001` |
 | 2 | Complete | Market Intelligence Agent: query -> plan -> MCP fetch -> analyze -> reflect |
@@ -113,7 +113,7 @@ Verified the Python environment and local LLM stack:
 - Ollama installed and serving locally
 - IBM Granite 4.1 8B pulled into Ollama
 - LangGraph hello world
-- BeeAI hello world
+- BeeAI hello world verified; production agents use the custom `BaseAgent` plan -> execute -> reflect pattern instead
 - Shared LLM helper in `services/llm.py`
 
 Key files:
@@ -357,7 +357,7 @@ See [docs/DEVLOG.md](docs/DEVLOG.md) for the full ADR text.
 
 | ADR | Phase | Decision |
 |-----|-------|----------|
-| ADR-001 | 0 | LangGraph orchestration + BeeAI per-agent construction |
+| ADR-001 | 0 | LangGraph orchestration; BeeAI evaluated, BaseAgent chosen for production agents |
 | ADR-002 | 2 | Reflection loop depth and retry policy |
 | ADR-003 | 3 | A2A transport: HTTP JSON-RPC 2.0 over gRPC for now |
 | ADR-004 | 4 | Explicit DAG-shaped plan object schema |

@@ -6,7 +6,7 @@ Step-by-step record of build progress and architecture decision records (ADRs).
 
 ## Phase 0 — Environment setup (2026-05-16)
 
-**Goal:** Ollama + Granite running, LangGraph + BeeAI installed, project scaffolded.
+**Goal:** Ollama + Granite running, LangGraph and BeeAI verified, project scaffolded.
 
 ### Environment
 
@@ -60,25 +60,27 @@ PRD directory tree created with package `__init__.py` stubs: `agents/`, `protoco
 
 ---
 
-## ADR-001: LangGraph orchestration + BeeAI per-agent construction
+## ADR-001: LangGraph orchestration + explicit BaseAgent specialist loop
 
 **Status:** Accepted (Phase 0)
 
-**Context:** Atlas needs multi-agent coordination with explicit state (DAGs, retries, HITL) and individual agents that benefit from Granite-native tool calling.
+**Context:** Atlas needs multi-agent coordination with explicit state (DAGs, retries, HITL) and individual agents whose reasoning steps are easy to inspect and ground against MCP data. BeeAI was verified in Phase 0, but the production agent loop needed a clearer portfolio-readable shape.
 
 **Decision:**
 
 - **LangGraph** — orchestration layer: workflow graphs, shared state, conditional routing between agents.
-- **BeeAI** — individual agent construction where it fits (tool-calling patterns, per-agent logic).
+- **Custom `BaseAgent` pattern** — specialist-agent construction with explicit `plan -> execute -> reflect` phases.
+- **BeeAI** — evaluated and kept as a hello-world proof, but deferred for production agents.
 
 **Consequences:**
 
 - Synthesis/orchestration code lives under `orchestration/` (LangGraph).
-- Specialist agents live under `agents/*` (BeeAI + MCP tools).
-- Both frameworks call the same Granite model via Ollama (`services/llm.py`).
+- Specialist agents live under `agents/*` and inherit the custom `BaseAgent` loop.
+- BeeAI remains installed because `examples/beeai_hello.py` proves the framework can call Granite, but Atlas agents do not depend on it.
+- LangGraph, BaseAgent agents, and the BeeAI hello world all call the same Granite model via Ollama (`services/llm.py`).
 - On 6GB VRAM, agents must serialize through Ollama; reflection loops need tight retry limits.
 
-**Alternatives considered:** Pure BeeAI orchestration — rejected for weaker explicit DAG/state story needed for demo traceability.
+**Alternatives considered:** Pure BeeAI orchestration or BeeAI-native ReAct agents — deferred in favor of explicit DAG/state orchestration and explicit `plan -> execute -> reflect` specialists needed for demo traceability.
 
 ---
 
@@ -432,3 +434,67 @@ python -m examples.synthesis_demo
 ### Phase 6 outcome
 
 **Complete.** Atlas now has four specialist agents: Market, Geopolitical, Supply Chain, and Research/Filing. The Research Agent is grounded by a Rust EDGAR MCP server rather than model knowledge alone.
+
+---
+
+## Phase 7 — Guardian Agent
+
+**Goal:** Add a second-pass quality gate that validates synthesized briefings before they reach the user.
+
+### Added
+
+| Path | Purpose |
+|------|---------|
+| `agents/guardian/agent.py` | `GuardianAgent` validator with `GuardianVerdict` and `ClaimCheck` TypedDicts |
+| `agents/guardian/agent_card.json` | Guardian Agent Card on `:9005` with `validate` and `confidence_score` skills |
+| `examples/guardian_demo.py` | Standalone demo with one grounded claim and one fabricated claim |
+
+### Modified
+
+| Path | Change |
+|------|--------|
+| `agents/guardian/__init__.py` | Exports `GuardianAgent`, `GuardianVerdict`, and `ClaimCheck` |
+| `orchestration/graph.py` | Adds `guardian` node after synthesis and one retry path for `LOW` confidence |
+| `orchestration/state.py` | Adds `guardian_verdict` and `guardian_retries` state fields |
+| `agents/synthesis/agent.py` | Accepts Guardian feedback during retry and keeps synthesis grounded to specialist sources |
+| `agents/synthesis/planner.py` | Prevents Guardian Agent Card from being selected as a specialist delegate |
+| `examples/synthesis_demo.py` | Prints Guardian validation output and saves verdict in run data |
+| `observability/run_logger.py` | Persists `guardian_verdict` in run JSON |
+| `memory/episodic.py` | Stores Guardian verdict inside the existing `agent_results` JSON payload |
+| `pyproject.toml` | Adds `atlas-guardian-demo` console script |
+
+### Verification
+
+- `python -m ruff check agents\guardian agents\synthesis orchestration examples\guardian_demo.py examples\synthesis_demo.py memory\episodic.py observability\run_logger.py` completed successfully.
+- `examples/guardian_demo.py` completed successfully and flagged the fabricated export-ban claim as unsupported.
+- `examples/synthesis_demo.py` completed successfully with Guardian validation and saved `runs\20260517_204248.json` including `guardian_verdict`.
+
+### Phase 7 outcome
+
+**Complete** when the full synthesis flow routes `plan -> delegate_to_agents -> synthesize -> guardian -> END`, attaches a Guardian verdict to the final briefing, and retries synthesis once if Guardian confidence is `LOW`.
+
+---
+
+## ADR-007: Confidence threshold calibration and Guardian separation of concerns
+
+**Status:** Accepted (Phase 7)
+
+**Context:** Atlas now combines live MCP data, model-knowledge specialist outputs, SEC filing evidence, memory context, and synthesized prose. The final user-facing answer needs a second-pass validation layer that can flag unsupported claims without becoming another content generator.
+
+**Decision:**
+
+- Add `GuardianAgent` as a validation-only agent. It does not extend `BaseAgent` and does not use `plan -> execute -> reflect`.
+- `GuardianAgent.validate(query, briefing, agent_results, sources)` makes one Granite call and returns structured `GuardianVerdict`.
+- Confidence calibration:
+  - `HIGH`: directly supported by multiple fresh sources or a clearly cited authoritative source.
+  - `MEDIUM`: supported by one source, stale-but-relevant context, or reasonable synthesis across agents.
+  - `LOW`: unsupported, contradicted, stale for time-sensitive claims, or speculative language stated as fact.
+- Guardian does not fix or rewrite content. It flags issues and assigns confidence; synthesis retry logic decides what to do.
+- LangGraph retries synthesis once when Guardian returns `LOW`, then returns the flagged result if confidence remains `LOW`.
+
+**Consequences:**
+
+- Validation remains separate from content generation, keeping responsibilities clear.
+- Guardian flags can be persisted and audited in run logs and episodic memory.
+- A single retry avoids infinite loops and controls local Granite runtime cost.
+- Future phases can route Guardian failures to human review or targeted specialist re-query without changing the verdict schema.

@@ -1,6 +1,6 @@
 # Atlas — Global Intelligence Platform | Project Context
 
-**Atlas** is a global business intelligence system powered by autonomous AI agents that communicate via industry-standard protocols. This document is the current plan and master reference point. Follow it as the default source of truth, but be ready to pivot on any decision — architecture, tooling, sequencing, agent design — if the conversation calls for it. Nothing here is sacred except the core goal.
+**Atlas** is a global business intelligence system powered by autonomous AI agents that communicate via industry-standard protocols. This document is the current plan and master reference point. Nothing here is sacred except the core goal.
 
 ---
 
@@ -8,7 +8,7 @@
 
 Build a system where specialized AI agents continuously gather, analyze, and synthesize global business intelligence — financial markets, geopolitical signals, trade and supply chain data, public filings, and news — into a unified knowledge base that a user can query in plain English, receive scheduled briefings from, and get real-time alerts when conditions change.
 
-This is a **portfolio project** designed to demonstrate mastery of:
+This is a **portfolio project** designed with:
 
 - Agentic AI architecture using emerging industry standards (MCP, A2A)
 - Multi-agent orchestration with explicit state management (LangGraph)
@@ -17,8 +17,6 @@ This is a **portfolio project** designed to demonstrate mastery of:
 - Full observability and decision traceability
 - Production-grade engineering on a fully open-source, on-prem stack
 - **Polyglot systems design** — Rust for the performance-critical data layer (MCP servers, ingestion), Python for the intelligence layer (agents, orchestration, UI)
-
-It should be impressive enough to walk through in a technical interview at any top-tier AI or tech company. The demo tells a story, not just "here's a chatbot."
 
 ---
 
@@ -45,7 +43,7 @@ This split reflects production practice: the hot path is Rust, the reasoning lay
 
 **LangGraph** — The orchestration layer (Python). Agent workflows are modeled as directed graphs with explicit state, conditional routing, retry logic, and human-in-the-loop checkpoints. The Synthesis Agent's execution plan is itself a DAG — fully traceable in OpenTelemetry.
 
-**BeeAI** — Used for individual agent construction (Python) where it provides a natural fit, particularly for agents that benefit from IBM Granite's native tool-calling patterns. BeeAI handles per-agent logic; LangGraph handles the coordination graph between agents.
+**BeeAI** — Evaluated in Phase 0 with a Granite hello-world demo, but not used for production Atlas agents. Specialist agents use the custom `BaseAgent` pattern with explicit `plan -> execute -> reflect` phases because that flow is easier to inspect, test, and ground against MCP data.
 
 ```
                     ┌─────────────────┐
@@ -260,7 +258,7 @@ All sources must be publicly accessible with no API key required, or free-tier A
 | Data ingestion | Custom pipeline | Rust | Document chunking, tokenization, batch embedding |
 | Embedding service | Custom wrapper | Rust | Vector generation via Ollama REST API |
 | Agent orchestration | LangGraph | Python | DAG-based workflow coordination, state management, conditional routing, retry logic |
-| Agent construction | BeeAI | Python | Individual agent logic, Granite-native tool calling |
+| Agent construction | Custom `BaseAgent` pattern | Python | Explicit `plan -> execute -> reflect` specialist-agent loop |
 | Agent communication | A2A Protocol (v1.0) | Python | Inter-agent discovery, task delegation, structured result exchange |
 | LLM | IBM Granite 4.1 8B via Ollama | — | Apache 2.0, Q4 quantized for 6GB VRAM |
 | Embeddings | Granite Embedding English R2 | — | Vector generation for semantic memory |
@@ -429,7 +427,7 @@ atlas/
 
 | Phase | Focus | Outcome | Key Decisions |
 |-------|-------|---------|---------------|
-| 0 | Environment setup | Ollama + Granite running, LangGraph + BeeAI installed, Rust toolchain installed, project scaffolded, Rust Ollama health check binary working | ADR: LangGraph vs pure BeeAI orchestration; ADR: Hybrid Rust/Python architecture |
+| 0 | Environment setup | Ollama + Granite running, LangGraph + BeeAI hello worlds verified, Rust toolchain installed, project scaffolded, Rust Ollama health check binary working | ADR: LangGraph orchestration; BeeAI evaluated then deferred for explicit BaseAgent loop; ADR: Hybrid Rust/Python architecture |
 | 1 | MCP foundation | First MCP server (Yahoo Finance) operational **in Rust**, returns structured data, Python agent can connect as MCP client | ADR: MCP server implementation pattern (Rust) |
 | 2 | Single agent PoC | Market Intelligence Agent (Python) can ingest via Rust MCP server, embed to ChromaDB, answer queries with self-reflection | ADR: Reflection loop depth and retry limits |
 | 3 | A2A protocol layer | A2A server running, Agent Cards published, two agents can discover and delegate tasks | ADR: A2A transport choice (HTTP vs gRPC) |
@@ -483,4 +481,4 @@ Phases are sequential by default but can be reordered if priorities shift. Each 
 - **Protocol implementation is the differentiator.** MCP and A2A are what set Atlas apart from generic agent projects. Get these right and everything else follows.
 - **The language boundary is the second differentiator.** Rust MCP servers + Python agents is what separates this from every other LangGraph project.
 - **The demo tells a story.** Every architectural decision should be visible in the Taiwan Strait demo scenario. If a feature can't be demonstrated, question whether it belongs in this phase.
-- **This relates to but is separate from Enterprise Profiler.** They share some stack (Granite, ChromaDB, BeeAI, Docling) but are independent projects with different goals. Cross-pollinate ideas where it makes sense but don't couple them.
+- **This relates to but is separate from Enterprise Profiler.** They share some stack (Granite, ChromaDB, Docling; BeeAI only as an evaluated framework) but are independent projects with different goals. Cross-pollinate ideas where it makes sense but don't couple them.

@@ -1,0 +1,22 @@
+{
+  "name": "Guardian Agent",
+  "description": "Second-pass validator — checks grounding, flags hallucinations, assigns confidence levels",
+  "url": "http://localhost:9005",
+  "version": "0.1.0",
+  "capabilities": {
+    "streaming": false,
+    "pushNotifications": false
+  },
+  "skills": [
+    {
+      "id": "validate",
+      "name": "Validate",
+      "description": "Check synthesized content against source evidence and flag unsupported claims"
+    },
+    {
+      "id": "confidence_score",
+      "name": "Confidence Score",
+      "description": "Assign per-claim and overall confidence based on grounding and freshness"
+    }
+  ]
+}
