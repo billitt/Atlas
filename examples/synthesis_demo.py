@@ -13,6 +13,7 @@ import httpx
 
 from agents.geopolitical.agent import GeopoliticalRiskAgent
 from agents.market.agent import DEFAULT_MCP_URL, MarketIntelligenceAgent
+from agents.research.agent import DEFAULT_EDGAR_MCP_URL, ResearchFilingAgent
 from agents.supply_chain.agent import SupplyChainAgent
 from agents.synthesis.agent import SynthesisAgent
 from memory.episodic import EpisodicMemory
@@ -52,7 +53,7 @@ async def run() -> None:
     )
 
     print("Atlas Synthesis Demo (Phase 4)")
-    print("Prerequisites: Ollama running, Rust MCP server on http://localhost:8001")
+    print("Prerequisites: Ollama running, MCP market :8001, MCP EDGAR :8002")
     print(f"Query: {query}")
     print("-" * 80)
 
@@ -75,13 +76,24 @@ async def run() -> None:
             host="127.0.0.1",
             port=9003,
         ),
+        A2AServer(
+            agent=ResearchFilingAgent(McpClient(DEFAULT_EDGAR_MCP_URL)),
+            agent_card_path=Path("agents/research/agent_card.json"),
+            host="127.0.0.1",
+            port=9004,
+        ),
     ]
 
     for server in servers:
         server.start_background()
 
     try:
-        urls = ["http://localhost:9001", "http://localhost:9002", "http://localhost:9003"]
+        urls = [
+            "http://localhost:9001",
+            "http://localhost:9002",
+            "http://localhost:9003",
+            "http://localhost:9004",
+        ]
         await wait_for_agent_cards(urls)
 
         registry = load_cards("agents")

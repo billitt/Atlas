@@ -2,7 +2,7 @@
 
 This file is maintained by Cursor after each phase. Claude reads it to understand the codebase without re-reading every file. **Cursor: update this file at the end of every phase.**
 
-Last updated: Phase 5 (2026-05-17)
+Last updated: Phase 6 (2026-05-17)
 
 ---
 
@@ -10,11 +10,11 @@ Last updated: Phase 5 (2026-05-17)
 
 | Metric | Value |
 |--------|-------|
-| Commits | 13 |
-| Total files | 72 |
-| Rust LOC | 615 |
-| Python LOC | 2,545 |
-| Phases complete | 0, 1A, 1B, 2, 3, 4, 5 |
+| Commits | 14 |
+| Total files | 81 |
+| Rust LOC | 959 |
+| Python LOC | 2,359 |
+| Phases complete | 0, 1A, 1B, 2, 3, 4, 5, 6 |
 
 ---
 
@@ -37,6 +37,12 @@ User query
           -> Granite model-knowledge analysis, explicit live-data limitation
         -> Supply Chain Agent :9003 (agents/supply_chain/agent.py)
           -> Granite model-knowledge analysis, explicit live-data limitation
+        -> Research & Filing Agent :9004 (agents/research/agent.py)
+          -> Semantic Memory ingest for filing text (memory/semantic.py)
+          -> MCP client (protocols/mcp/client.py)
+            -> Rust MCP server :8002 (rust/mcp-edgar/)
+              -> SEC EDGAR submissions, Archives, full-text search APIs
+          -> Granite via Ollama (services/llm.py)
       -> Synthesis Agent queries Episodic Memory for similar briefings
       -> Granite synthesizes unified briefing
       -> Run Logger writes runs/YYYYMMDD_HHMMSS.json
@@ -54,7 +60,7 @@ Memory tiers:
 
 ### Rust — Data Layer
 
-**rust/Cargo.toml** — Workspace root. Members: `ollama-check`, `mcp-market-data`.
+**rust/Cargo.toml** — Workspace root. Members: `ollama-check`, `mcp-market-data`, `mcp-edgar`.
 
 **rust/ollama-check/src/main.rs**
 - Phase 1A health check binary.
@@ -84,6 +90,51 @@ Memory tiers:
 - `pub fn quote_to_text(quote: &Quote) -> String`
 - Uses `range=1d` for latest price/previous close and `range=1mo` for volume baselines.
 - `Quote`: `symbol`, `regular_market_price`, `previous_close`, `change_percent`, `currency`, `regular_market_volume`, `previous_day_volume`, `average_volume_5d`, `volume_vs_average_percent`.
+
+**rust/mcp-edgar/src/main.rs** (60 lines)
+- Axum server on port `8002`.
+- Routes: `GET /health`, `POST /mcp`.
+- Shared state: `AppState { http: reqwest::Client }`.
+- Constant: `SEC_USER_AGENT: &str = "Atlas-MCP/0.1 (atlas-project@example.com)"`.
+- `async fn main()`
+- `async fn health() -> Json<serde_json::Value>`
+- `async fn mcp_endpoint(State(state): State<AppState>, Json(request): Json<JsonRpcRequest>) -> Json<serde_json::Value>`
+- Dependencies: `axum`, `reqwest`, `serde_json`, `tower_http`, `crate::mcp`.
+- Called by: local process via `cargo run -p mcp-edgar`; Python `McpClient` sends HTTP JSON-RPC to `/mcp`.
+
+**rust/mcp-edgar/src/mcp.rs** (147 lines)
+- MCP JSON-RPC 2.0 router for SEC filing tools.
+- Methods: `initialize`, `tools/list`, `tools/call`.
+- Tools: `company_filings`, `filing_text`, `full_text_search`.
+- `pub async fn handle_json_rpc(state: AppState, request: JsonRpcRequest) -> Json<Value>`
+- `fn handle_initialize() -> Result<Value, (i32, String)>`
+- `fn handle_tools_list() -> Result<Value, (i32, String)>`
+- `async fn handle_tools_call(state: &AppState, params: Option<Value>) -> Result<Value, (i32, String)>`
+- `fn required_str<'a>(args: &'a Value, key: &str) -> Result<&'a str, (i32, String)>`
+- `fn json_rpc_success(id: Value, result: Value) -> Value`
+- `fn json_rpc_error(id: Value, code: i32, message: &str) -> Value`
+- Dependencies: `crate::edgar::{company_filings, filing_text, full_text_search}`, `crate::AppState`, `axum::Json`, `serde`, `serde_json`.
+- Called by: `rust/mcp-edgar/src/main.rs::mcp_endpoint`.
+
+**rust/mcp-edgar/src/edgar.rs** (230 lines)
+- SEC EDGAR API client.
+- Structs:
+  - `FilingSummary { accession_number, filing_date, form_type, primary_document, primary_document_url }`
+  - `CompanyTicker { cik_str, ticker, title }`
+  - `SubmissionResponse { cik, name, filings }`
+  - `SubmissionFilings { recent }`
+  - `RecentFilings { accession_number, filing_date, form, primary_document }`
+- `pub async fn resolve_ticker(client: &reqwest::Client, ticker: &str) -> Result<String, String>`
+- `pub async fn company_filings(client: &reqwest::Client, ticker: Option<&str>, cik: Option<&str>) -> Result<Vec<FilingSummary>, String>`
+- `pub async fn filing_text(client: &reqwest::Client, cik: &str, accession_number: &str) -> Result<String, String>`
+- `pub async fn full_text_search(client: &reqwest::Client, query: &str, form_type: Option<&str>, date_from: Option<&str>) -> Result<Value, String>`
+- `pub fn pad_cik(cik: &str) -> String`
+- `async fn sec_get(client: &reqwest::Client, url: &str) -> Result<reqwest::Response, String>`
+- `async fn sec_delay()`
+- `fn strip_html(input: &str) -> String`
+- API dependencies: `https://www.sec.gov/files/company_tickers.json`, `https://data.sec.gov/submissions/CIK##########.json`, `https://www.sec.gov/Archives/edgar/data/...`, `https://efts.sec.gov/LATEST/search-index`.
+- EDGAR rules: every request includes `SEC_USER_AGENT`; `sec_delay()` waits 125 ms before calls; `pad_cik()` zero-pads CIKs to 10 digits.
+- Called by: `rust/mcp-edgar/src/mcp.rs`.
 
 ### Services
 
@@ -213,10 +264,53 @@ Memory tiers:
 - `execute(query: str, plan: dict[str, Any]) -> AgentResult`
 - `reflect(query: str, draft: AgentResult) -> tuple[bool, str, Confidence]`
 
+**agents/research/agent.py** (214 lines)
+- `class ResearchFilingAgent(BaseAgent)`
+- SEC filing specialist backed by `mcp-edgar`.
+- Constant: `DEFAULT_EDGAR_MCP_URL = "http://localhost:8002"`.
+- `__init__(mcp_client: McpClient, *, max_retries: int = 2, semantic_memory: SemanticMemory | None = None) -> None`
+- `setup() -> None`
+- `plan(query: str) -> dict[str, Any]`
+- `execute(query: str, plan: dict[str, Any]) -> AgentResult`
+- `reflect(query: str, draft: AgentResult) -> tuple[bool, str, Confidence]`
+- `_ingest_filing_text(filing_payload: dict[str, Any], args: dict[str, Any]) -> None`
+- Helpers:
+  - `_fallback_ticker(query: str) -> str`
+  - `_query_needs_filing_text(query: str) -> bool`
+  - `_first_periodic_filing(filings: dict[str, Any]) -> dict[str, Any] | None`
+  - `_cik_for_ticker(ticker: str | None) -> str | None`
+  - `_parse_json(text: str) -> dict[str, Any]`
+- Dependencies: `agents.base`, `agents.research.tools`, `memory.semantic.SemanticMemory`, `protocols.mcp.client.McpClient`, `services.llm.chat`.
+- Called by: `examples/edgar_demo.py`, `examples/synthesis_demo.py` through `A2AServer`.
+- Memory behavior: after fetching 10-K/10-Q/20-F text, stores filing text chunks in ChromaDB semantic memory with metadata `source=sec_edgar`, `accession_number`, `cik`.
+
+**agents/research/tools.py** (54 lines)
+- MCP helpers for EDGAR tools.
+- Global: `AVAILABLE_TOOLS: list[dict[str, Any]]`.
+- `load_tools(client: McpClient) -> list[dict[str, Any]]`
+- `format_tools_for_prompt() -> str`
+- `extract_text_content(mcp_result: dict[str, Any]) -> str`
+- `call_company_filings(client: McpClient, *, ticker: str | None = None, cik: str | None = None) -> dict[str, Any]`
+- `call_filing_text(client: McpClient, accession_number: str, cik: str) -> dict[str, Any]`
+- `call_full_text_search(client: McpClient, query: str, form_type: str | None = None, date_from: str | None = None) -> dict[str, Any]`
+- `_parse_tool_result(raw: dict[str, Any]) -> dict[str, Any]`
+- Dependencies: `protocols.mcp.client.McpClient`, `json`.
+- Called by: `agents/research/agent.py`, `examples/edgar_demo.py`.
+
+**agents/research/agent_card.json** (27 lines)
+- A2A Agent Card.
+- URL: `http://localhost:9004`.
+- Skills:
+  - `filing_summary`
+  - `financial_extract`
+  - `filing_diff`
+- Loaded by: `protocols.a2a.discovery.load_cards("agents")`, `examples/synthesis_demo.py`, `A2AServer`.
+
 **agents/synthesis/planner.py**
 - `create_execution_plan(query: str, agent_cards: list[dict[str, Any]]) -> dict[str, Any]`
 - `agent_key(card: dict[str, Any]) -> str`
 - Produces DAG-shaped plan: `{"steps": [{"agent", "task", "depends_on"}], "rationale"}`.
+- Phase 6 routing: `agent_key()` maps Research & Filing Agent to `research`; prompt and fallback include Research for filings, earnings, SEC data, risk factors, annual reports, 10-K/10-Q, and company-specific financial details.
 
 **agents/synthesis/agent.py** (188 lines)
 - `class SynthesisAgent`
@@ -251,10 +345,17 @@ Memory tiers:
 - `main() -> None`
 - Proves semantic, episodic, and working memory independently.
 
-**examples/synthesis_demo.py** (164 lines)
-- Starts A2A servers on `9001`, `9002`, `9003`.
+**examples/synthesis_demo.py** (152 lines)
+- Starts A2A servers on `9001`, `9002`, `9003`, `9004`.
 - Runs LangGraph synthesis flow.
 - Saves JSON run artifact and SQLite briefing record.
+
+**examples/edgar_demo.py** (43 lines)
+- Standalone Phase 6 demo for EDGAR MCP + Research Agent.
+- `async def run() -> None`
+- `def main() -> None`
+- Connects to `DEFAULT_EDGAR_MCP_URL`, lists EDGAR tools, fetches AAPL filings, fetches one 10-K/10-Q text payload, and runs `ResearchFilingAgent`.
+- Dependencies: `agents.research.agent`, `agents.research.tools`, `protocols.mcp.client.McpClient`.
 
 Other demos:
 - `scripts/verify_ollama.py`
@@ -268,7 +369,7 @@ Other demos:
 **pyproject.toml**
 - Packages: `services`, `examples`, `scripts`, `protocols`, `agents`, `orchestration`, `memory`, `observability`.
 - Dependencies include: `langgraph`, `langchain-ollama`, `beeai-framework`, `a2a-sdk`, `mcp`, `httpx`, `chromadb`, `sqlmodel`, `python-dotenv`.
-- Scripts include: `atlas-memory-demo`, `atlas-synthesis-demo`.
+- Scripts include: `atlas-memory-demo`, `atlas-synthesis-demo`, `atlas-edgar-demo`.
 
 **.env.example**
 - `OLLAMA_BASE_URL=http://localhost:11434`
@@ -323,6 +424,22 @@ Other demos:
 - Updated `.env.example` with `OLLAMA_EMBED_MODEL=granite-embedding:278m`.
 - ADR-005 episodic memory schema design.
 
+### Phase 6 — Research & Filing Agent with SEC EDGAR MCP Server
+- Created `rust/mcp-edgar/Cargo.toml`.
+- Created `rust/mcp-edgar/src/main.rs` with Axum server on `:8002`, `/health`, `/mcp`, and SEC `User-Agent`.
+- Created `rust/mcp-edgar/src/mcp.rs` with MCP tools `company_filings`, `filing_text`, `full_text_search`.
+- Created `rust/mcp-edgar/src/edgar.rs` with ticker-to-CIK resolution, CIK zero-padding, SEC submissions parsing, Archives filing fetch, full-text search, 125 ms SEC rate-limit delay, and HTML stripping.
+- Modified `rust/Cargo.toml` to add workspace member `mcp-edgar`.
+- Created `agents/research/agent.py` with `ResearchFilingAgent(BaseAgent)`, Granite planning/analysis/reflection, EDGAR MCP calls, and semantic memory ingestion for filing text.
+- Created `agents/research/tools.py` with EDGAR MCP helper functions.
+- Created `agents/research/agent_card.json` for A2A discovery on `:9004`.
+- Modified `agents/research/__init__.py` to export `ResearchFilingAgent`.
+- Modified `agents/synthesis/planner.py` to include Research for SEC filings, earnings, risk factors, annual reports, and company-specific financial details.
+- Modified `examples/synthesis_demo.py` to start Research A2A server on `:9004` and require EDGAR MCP on `:8002`.
+- Created `examples/edgar_demo.py` standalone EDGAR MCP + Research Agent demo.
+- Modified `pyproject.toml` to add `atlas-edgar-demo`.
+- Verification: `cargo check -p mcp-edgar`, Ruff check, `examples/edgar_demo.py`, and full four-agent `examples/synthesis_demo.py` all completed successfully.
+
 ---
 
 ## Dependencies Between Files
@@ -338,6 +455,12 @@ examples/synthesis_demo.py
     -> services/llm.py -> Ollama / Granite
   -> agents/geopolitical/agent.py -> services/llm.py
   -> agents/supply_chain/agent.py -> services/llm.py
+  -> agents/research/agent.py
+    -> agents/research/tools.py
+      -> protocols/mcp/client.py -> Rust MCP server :8002
+        -> SEC EDGAR APIs
+    -> memory/semantic.py -> services/embeddings.py -> Ollama /api/embed
+    -> services/llm.py -> Ollama / Granite
   -> agents/synthesis/agent.py
     -> agents/synthesis/planner.py -> services/llm.py
     -> protocols/a2a/client.py
@@ -350,6 +473,13 @@ examples/memory_demo.py
   -> memory/semantic.py -> services/embeddings.py -> Ollama /api/embed
   -> memory/episodic.py -> SQLite data/sqlite/atlas_episodic.db
   -> memory/working.py
+
+examples/edgar_demo.py
+  -> agents/research/agent.py
+  -> agents/research/tools.py
+  -> protocols/mcp/client.py -> Rust MCP server :8002
+    -> rust/mcp-edgar/src/mcp.rs
+      -> rust/mcp-edgar/src/edgar.rs -> SEC EDGAR APIs
 ```
 
 ---
@@ -360,24 +490,23 @@ examples/memory_demo.py
 |------|---------|--------|
 | 11434 | Ollama | Required for Granite chat and embeddings |
 | 8001 | Rust `mcp-market-data` | Required for Market Agent |
+| 8002 | Rust `mcp-edgar` | Required for Research & Filing Agent |
 | 9001 | A2A Market Agent | Started by demos |
 | 9002 | A2A Geopolitical Agent | Started by demos |
 | 9003 | A2A Supply Chain Agent | Started by demos |
-
-No new ports were added in Phase 5.
+| 9004 | A2A Research & Filing Agent | Started by demos |
 
 ---
 
 ## What's Stubbed / Not Yet Built
 
-- `agents/research/` — empty package only.
 - `agents/guardian/` — empty package only.
 - `ingestion/` — empty package only.
 - `ui/` — empty package only.
 - `cli/` — empty package only.
 - Geopolitical live data MCP server not built; agent uses model knowledge.
 - Supply-chain live data MCP server not built; agent uses model knowledge.
-- All Rust MCP servers except `mcp-market-data` are not built.
+- Rust MCP servers built: `mcp-market-data`, `mcp-edgar`; future MCP servers remain unbuilt.
 - Observability is minimal: JSON run logging exists, OpenTelemetry spans are not wired yet.
 
-`memory/` is no longer a stub as of Phase 5.
+`memory/` is no longer a stub as of Phase 5. `agents/research/` is no longer a stub as of Phase 6.

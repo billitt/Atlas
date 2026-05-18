@@ -1,0 +1,17 @@
+[package]
+name = "mcp-edgar"
+version = "0.1.0"
+edition = "2021"
+description = "Atlas MCP server for SEC EDGAR filings"
+
+[[bin]]
+name = "mcp-edgar"
+path = "src/main.rs"
+
+[dependencies]
+axum = { version = "0.8", features = ["json"] }
+reqwest = { version = "0.12", features = ["json"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+tower-http = { version = "0.6", features = ["cors"] }

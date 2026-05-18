@@ -1,0 +1,27 @@
+{
+  "name": "Research & Filing Agent",
+  "description": "Analyzes SEC EDGAR filings, disclosures, risk factors, and company-specific filing evidence",
+  "url": "http://localhost:9004",
+  "version": "0.1.0",
+  "capabilities": {
+    "streaming": false,
+    "pushNotifications": false
+  },
+  "skills": [
+    {
+      "id": "filing_summary",
+      "name": "Filing Summary",
+      "description": "Summarize company SEC filings and key filing metadata"
+    },
+    {
+      "id": "financial_extract",
+      "name": "Financial Extract",
+      "description": "Extract structured financial or disclosure details from filings"
+    },
+    {
+      "id": "filing_diff",
+      "name": "Filing Diff",
+      "description": "Compare filing language across reporting periods"
+    }
+  ]
+}

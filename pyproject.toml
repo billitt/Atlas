@@ -45,6 +45,7 @@ atlas-market-agent-demo = "examples.market_agent_demo:main"
 atlas-a2a-demo = "examples.a2a_demo:main"
 atlas-synthesis-demo = "examples.synthesis_demo:main"
 atlas-memory-demo = "examples.memory_demo:main"
+atlas-edgar-demo = "examples.edgar_demo:main"
 
 [build-system]
 requires = ["hatchling"]

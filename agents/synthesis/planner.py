@@ -33,7 +33,9 @@ Rules:
 - Use the Agent Card `key` field as the step `agent` value.
 - Include all agents needed for a cross-domain briefing.
 - For Taiwan Strait / semiconductor / market-impact questions, include market,
-  geopolitical, and supply_chain agents.
+  geopolitical, supply_chain, and research agents.
+- Include the research agent for queries involving filings, earnings, SEC data,
+  risk factors, annual reports, 10-K/10-Q, or company-specific financial details.
 - For the market step in Taiwan Strait semiconductor scenarios, ask for valid
   Yahoo symbols such as TSM, NVDA, ASML, SMH, SOXX, and SPY; avoid delisted or
   ambiguous tickers.
@@ -82,12 +84,14 @@ def agent_key(card: JsonDict) -> str:
         return "geopolitical"
     if "supply" in name:
         return "supply_chain"
+    if "research" in name or "filing" in name:
+        return "research"
     return re.sub(r"[^a-z0-9]+", "_", name).strip("_") or "agent"
 
 
 def _fallback_plan(query: str, agent_cards: list[JsonDict]) -> JsonDict:
     available = {agent_key(card) for card in agent_cards}
-    preferred = ["geopolitical", "supply_chain", "market"]
+    preferred = ["geopolitical", "supply_chain", "research", "market"]
     steps = [
         {
             "agent": key,
@@ -119,6 +123,8 @@ def _fallback_task(agent: str, query: str) -> str:
         return f"Assess semiconductor supply-chain exposure relevant to: {query}"
     if agent == "market":
         return f"Assess market impact and relevant semiconductor equities for: {query}"
+    if agent == "research":
+        return f"Review SEC filing evidence and risk-factor disclosures relevant to: {query}"
     return query
 
 

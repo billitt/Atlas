@@ -364,3 +364,71 @@ python -m examples.memory_demo
 - Queries are simple and local.
 - JSON fields are flexible while schemas are still emerging.
 - More advanced search/ranking can be added later without changing the persisted event model.
+
+---
+
+## Phase 6 — Research & Filing Agent with SEC EDGAR MCP server
+
+**Goal:** Add the fourth specialist agent backed by a real Rust MCP server for SEC EDGAR filings.
+
+### Added
+
+| Path | Purpose |
+|------|---------|
+| `rust/mcp-edgar/Cargo.toml` | Rust crate config for the SEC EDGAR MCP server |
+| `rust/mcp-edgar/src/main.rs` | Axum server on `:8002` with `/health` and `/mcp` endpoints |
+| `rust/mcp-edgar/src/mcp.rs` | MCP JSON-RPC router exposing `company_filings`, `filing_text`, and `full_text_search` |
+| `rust/mcp-edgar/src/edgar.rs` | SEC EDGAR client with User-Agent, CIK padding, rate-limit delay, submissions parsing |
+| `agents/research/agent.py` | Research & Filing Agent using EDGAR MCP plus semantic memory ingestion |
+| `agents/research/tools.py` | Python MCP helpers for EDGAR tools |
+| `agents/research/agent_card.json` | Research Agent A2A Agent Card on `:9004` |
+| `examples/edgar_demo.py` | Standalone EDGAR MCP + Research Agent demo |
+
+### Modified
+
+| Path | Change |
+|------|--------|
+| `rust/Cargo.toml` | Added `mcp-edgar` workspace member |
+| `agents/research/__init__.py` | Exports `ResearchFilingAgent` |
+| `agents/synthesis/planner.py` | Planner now selects Research Agent for filings, earnings, SEC data, risk factors, and company financial detail |
+| `examples/synthesis_demo.py` | Starts Research A2A server on `:9004` and requires EDGAR MCP on `:8002` |
+| `pyproject.toml` | Adds `atlas-edgar-demo` console script |
+
+### SEC EDGAR implementation notes
+
+- Every SEC HTTP request uses `User-Agent: Atlas-MCP/0.1 (atlas-project@example.com)`.
+- `edgar::pad_cik(cik: &str) -> String` normalizes CIKs to EDGAR's 10-digit submissions format.
+- `edgar::sec_delay() -> ()` waits 125 ms before upstream calls, keeping local demos below the SEC 10 requests/second guidance.
+- `company_filings` resolves tickers through `company_tickers.json`, fetches `data.sec.gov/submissions/CIK##########.json`, and returns recent filing metadata with primary document URLs.
+- `filing_text` resolves the primary document for an accession number, fetches it from SEC Archives, strips HTML tags, and returns the first 10,000 characters.
+- `full_text_search` calls SEC's `efts.sec.gov/LATEST/search-index` endpoint.
+
+### Run
+
+```bash
+# Service 1 — Ollama must already be running with Granite pulled
+ollama run ibm/granite4.1:8b
+
+# Service 2 — Market MCP for the Market Agent
+cd rust && cargo run -p mcp-market-data
+
+# Service 3 — EDGAR MCP for the Research Agent
+cd rust && cargo run -p mcp-edgar
+
+# Standalone EDGAR demo
+python -m examples.edgar_demo
+
+# Full four-agent synthesis demo
+python -m examples.synthesis_demo
+```
+
+### Verification
+
+- `cargo check -p mcp-edgar` completed successfully.
+- `python -m ruff check agents\research examples\edgar_demo.py examples\synthesis_demo.py agents\synthesis\planner.py` completed successfully.
+- `examples/edgar_demo.py` completed successfully: listed EDGAR tools, fetched AAPL filings, fetched filing text, ingested filing text into semantic memory, and passed Research Agent reflection.
+- `examples/synthesis_demo.py` completed successfully with four A2A agents, included Research in the plan, and saved `runs\20260517_200249.json`.
+
+### Phase 6 outcome
+
+**Complete.** Atlas now has four specialist agents: Market, Geopolitical, Supply Chain, and Research/Filing. The Research Agent is grounded by a Rust EDGAR MCP server rather than model knowledge alone.
