@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import Column, JSON
+from sqlalchemy import Column, JSON, inspect, text
 from sqlmodel import Field, Session, SQLModel, create_engine, select
 
 DB_PATH = "data/sqlite/atlas_episodic.db"
@@ -16,11 +16,14 @@ class BriefingRecord(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     timestamp: datetime = Field(default_factory=datetime.now, index=True)
     query: str = Field(index=True)
+    briefing_type: str = Field(default="custom", index=True)
+    topics: list[str] = Field(default_factory=list, sa_column=Column(JSON))
     plan: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
     agent_results: list[dict[str, Any]] = Field(default_factory=list, sa_column=Column(JSON))
     final_briefing: str
     confidence: str = Field(index=True)
     sources: list[dict[str, Any]] = Field(default_factory=list, sa_column=Column(JSON))
+    delta_from_last: str | None = None
     trace_id: str | None = Field(default=None, index=True)
     duration_seconds: float | None = None
 
@@ -55,6 +58,22 @@ class EpisodicMemory:
 
     def init_db(self) -> None:
         SQLModel.metadata.create_all(self.engine)
+        self._migrate_briefing_record()
+
+    def _migrate_briefing_record(self) -> None:
+        inspector = inspect(self.engine)
+        if "briefingrecord" not in inspector.get_table_names():
+            return
+        columns = {column["name"] for column in inspector.get_columns("briefingrecord")}
+        migrations = {
+            "briefing_type": "ALTER TABLE briefingrecord ADD COLUMN briefing_type VARCHAR DEFAULT 'custom'",
+            "topics": "ALTER TABLE briefingrecord ADD COLUMN topics JSON DEFAULT '[]'",
+            "delta_from_last": "ALTER TABLE briefingrecord ADD COLUMN delta_from_last VARCHAR",
+        }
+        with self.engine.begin() as conn:
+            for column, statement in migrations.items():
+                if column not in columns:
+                    conn.execute(text(statement))
 
     def log_briefing(self, run_data: dict[str, Any]) -> BriefingRecord:
         timestamp = _parse_timestamp(run_data.get("timestamp"))
@@ -65,11 +84,14 @@ class EpisodicMemory:
         record = BriefingRecord(
             timestamp=timestamp,
             query=str(run_data.get("query", "")),
+            briefing_type=str(run_data.get("briefing_type", "custom")),
+            topics=run_data.get("topics") or [],
             plan=run_data.get("execution_plan") or run_data.get("plan") or {},
             agent_results=agent_results,
             final_briefing=str(run_data.get("final_briefing", "")),
             confidence=str(run_data.get("confidence", "LOW")),
             sources=run_data.get("sources") or [],
+            delta_from_last=run_data.get("delta_from_last"),
             trace_id=run_data.get("trace_id"),
             duration_seconds=run_data.get("duration_seconds"),
         )
@@ -144,6 +166,24 @@ class EpisodicMemory:
             for record in records
             if topic_lower in record.query.lower() or topic_lower in record.final_briefing.lower()
         ]
+
+    def get_last_briefing(self, topic: str) -> BriefingRecord | None:
+        topic_lower = topic.lower()
+        statement = select(BriefingRecord).order_by(BriefingRecord.timestamp.desc())
+        with Session(self.engine) as session:
+            records = list(session.exec(statement))
+        for record in records:
+            raw_topics = record.topics or []
+            if isinstance(raw_topics, str):
+                raw_topics = [raw_topics]
+            topics = [str(item).lower() for item in raw_topics]
+            if (
+                topic_lower in topics
+                or topic_lower in record.query.lower()
+                or topic_lower in record.final_briefing.lower()
+            ):
+                return record
+        return None
 
     def briefing_count(self) -> int:
         with Session(self.engine) as session:

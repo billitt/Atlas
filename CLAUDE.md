@@ -2,7 +2,7 @@
 
 This file is maintained by Cursor after each phase. Claude reads it to understand the codebase without re-reading every file. **Cursor: update this file at the end of every phase.**
 
-Last updated: Phase 7 (2026-05-17)
+Last updated: Phase 8 (2026-05-18)
 
 ---
 
@@ -10,11 +10,11 @@ Last updated: Phase 7 (2026-05-17)
 
 | Metric | Value |
 |--------|-------|
-| Commits | 15 |
-| Total files | 87 |
+| Commits | 16 |
+| Total files | 93 |
 | Rust LOC | 959 |
-| Python LOC | 2,646 |
-| Phases complete | 0, 1A, 1B, 2, 3, 4, 5, 6, 7 |
+| Python LOC | 3,134 |
+| Phases complete | 0, 1A, 1B, 2, 3, 4, 5, 6, 7, 8 |
 
 ---
 
@@ -50,6 +50,14 @@ User query
         -> Otherwise attach guardian_verdict and continue
       -> Run Logger writes runs/YYYYMMDD_HHMMSS.json
       -> Episodic Memory writes BriefingRecord
+
+Scheduled briefing flow:
+  APScheduler (services/scheduler.py)
+    -> BriefingEngine (services/briefing.py)
+      -> For each watchlist topic:
+        -> LangGraph Synthesis workflow (plan -> delegate -> synthesize -> guardian)
+      -> briefing templates (services/briefing_templates.py)
+      -> Run Logger + Episodic Memory
 
 Memory tiers:
   Tier 1 Semantic: ChromaDB persistent vectors in data/chroma
@@ -156,6 +164,43 @@ Memory tiers:
 - `def _embed_with_model(texts: list[str], model: str) -> list[list[float]]`
 - Calls `POST /api/embed` with `OLLAMA_EMBED_MODEL`, falls back to `OLLAMA_CHAT_MODEL`.
 
+**services/briefing.py** (140 lines)
+- Scheduled briefing engine over the full synthesis + Guardian pipeline.
+- Constants: `DEFAULT_WATCHLIST`.
+- `class BriefingEngine`
+- `__init__(synthesis_agent: SynthesisAgent, *, episodic_memory: EpisodicMemory | None = None, guardian: GuardianAgent | None = None, briefing_type: str = "daily") -> None`
+- `async def generate_briefing(topics: list[str] | None = None) -> dict[str, Any]`
+- `_persist(briefing: dict[str, Any]) -> None`
+- Helpers:
+  - `_topic_query(topic: str) -> str`
+  - `_delta_from_last(topic: str, briefing: dict[str, Any], last: Any | None) -> str`
+  - `_overall_risk_level(sections: list[dict[str, Any]]) -> str`
+  - `_briefing_text_for_memory(briefing: dict[str, Any]) -> str`
+- Dependencies: `agents.synthesis.agent.SynthesisAgent`, `agents.guardian.agent.GuardianAgent`, `memory.episodic.EpisodicMemory`, `observability.run_logger.save_run`, `orchestration.graph.build_synthesis_graph`.
+- Called by: `examples/briefing_demo.py`, `examples/scheduler_demo.py`, `services/scheduler.py`.
+
+**services/briefing_templates.py** (51 lines)
+- Pure formatting helpers; no LLM calls, no data fetching.
+- `format_daily_briefing(briefing: dict[str, Any]) -> str`
+- `format_summary_line(briefing: dict[str, Any]) -> str`
+- Dependencies: `typing.Any`.
+- Called by: `examples/briefing_demo.py`, `services/scheduler.py`.
+
+**services/scheduler.py** (88 lines)
+- APScheduler integration for autonomous briefings.
+- `class AtlasScheduler`
+- `__init__(briefing_engine: BriefingEngine) -> None`
+- `start() -> None`
+- `schedule_daily_briefing(hour: int = 7, minute: int = 0, topics: list[str] | None = None) -> str`
+- `schedule_weekly_briefing(day_of_week: str = "mon", hour: int = 7, topics: list[str] | None = None) -> str`
+- `schedule_custom(cron_expression: str, topics: list[str]) -> str`
+- `stop() -> None`
+- `list_jobs() -> list[dict[str, Any]]`
+- `async def _run_briefing_job(briefing_type: str, topics: list[str] | None) -> None`
+- `_cron_trigger_from_expression(cron_expression: str) -> CronTrigger`
+- Dependencies: `apscheduler.schedulers.asyncio.AsyncIOScheduler`, `apscheduler.triggers.cron.CronTrigger`, `services.briefing.BriefingEngine`, `services.briefing_templates.format_summary_line`.
+- Called by: `examples/scheduler_demo.py`.
+
 ### Memory
 
 **memory/semantic.py** (94 lines)
@@ -168,23 +213,26 @@ Memory tiers:
 - Helper: `_chunk_text(text: str, *, max_chars: int = 1200, overlap: int = 150) -> list[str]`
 - Dependencies: `chromadb.PersistentClient`, `services.embeddings.embed_texts`.
 
-**memory/episodic.py** (138 lines)
+**memory/episodic.py** (173 lines)
 - SQLite + SQLModel episodic memory.
 - DB path: `data/sqlite/atlas_episodic.db`.
 - Tables:
-  - `BriefingRecord`: `id`, `timestamp`, `query`, `plan`, `agent_results`, `final_briefing`, `confidence`, `sources`, `trace_id`, `duration_seconds`.
+  - `BriefingRecord`: `id`, `timestamp`, `query`, `briefing_type`, `topics`, `plan`, `agent_results`, `final_briefing`, `confidence`, `sources`, `delta_from_last`, `trace_id`, `duration_seconds`.
   - `AlertRecord`: `id`, `timestamp`, `trigger`, `agent_chain`, `assessment`, `severity`.
   - `AgentExecution`: `id`, `timestamp`, `agent_name`, `task`, `result`, `confidence`, `duration_seconds`.
 - `class EpisodicMemory`
 - `__init__(db_path: str = DB_PATH) -> None`
 - `init_db() -> None`
+- `_migrate_briefing_record() -> None`
 - `log_briefing(run_data: dict[str, Any]) -> BriefingRecord`
 - `log_agent_execution(agent_name: str, task: str, result: dict[str, Any], confidence: str, duration: float | None) -> AgentExecution`
 - `query_briefings(query: str, limit: int = 10) -> list[BriefingRecord]`
 - `query_briefings_by_date(start: datetime, end: datetime) -> list[BriefingRecord]`
 - `get_confidence_history(topic: str, days: int = 90) -> list[dict[str, Any]]`
+- `get_last_briefing(topic: str) -> BriefingRecord | None`
 - `briefing_count() -> int`
 - Phase 7: `log_briefing()` appends `guardian_verdict` into the existing `agent_results` JSON list as `{"agent": "guardian", "verdict": ...}` instead of adding a new column, avoiding SQLite migration churn during local demos.
+- Phase 8: `BriefingRecord` stores scheduled-briefing metadata; `_migrate_briefing_record()` adds new SQLite columns for existing local databases.
 
 **memory/working.py** (30 lines)
 - Per-query scratchpad.
@@ -367,10 +415,10 @@ Memory tiers:
 
 ### Observability
 
-**observability/run_logger.py** (28 lines)
+**observability/run_logger.py** (34 lines)
 - `save_run(run_data: dict[str, Any]) -> Path`
 - Writes `runs/YYYYMMDD_HHMMSS.json`.
-- Payload keys: `timestamp`, `query`, `execution_plan`, `agent_results`, `sources`, `confidence`, `final_briefing`, `guardian_verdict`, `duration_seconds`, `memory_stats`.
+- Payload keys: `timestamp`, `query`, `briefing_type`, `topics`, `sections_count`, `overall_risk_level`, `execution_plan`, `agent_results`, `sources`, `confidence`, `final_briefing`, `guardian_verdict`, `delta_from_last`, `per_topic`, `duration_seconds`, `memory_stats`.
 
 ### Examples / Scripts
 
@@ -396,6 +444,22 @@ Memory tiers:
 - Builds a fake briefing with one grounded claim and one fabricated claim, then calls `GuardianAgent.validate()`.
 - Dependencies: `agents.guardian.agent.GuardianAgent`, `json`, `sys`.
 
+**examples/briefing_demo.py** (105 lines)
+- Immediate Phase 8 briefing generation demo.
+- `async def wait_for_agent_cards(urls: list[str], *, timeout_seconds: float = 10.0) -> None`
+- `def start_agent_servers() -> list[A2AServer]`
+- `async def run() -> None`
+- `def main() -> None`
+- Starts Market, Geopolitical, Supply Chain, and Research A2A servers; builds `BriefingEngine`; runs default watchlist; prints `format_daily_briefing()` and `format_summary_line()`.
+- Dependencies: specialist agents, `SynthesisAgent`, `GuardianAgent`, `EpisodicMemory`, `A2AServer`, `McpClient`, `BriefingEngine`, briefing templates.
+
+**examples/scheduler_demo.py** (63 lines)
+- Autonomous Phase 8 scheduler demo.
+- `async def run() -> None`
+- `def main() -> None`
+- Reuses `start_agent_servers()` and `wait_for_agent_cards()` from `examples.briefing_demo`; schedules `AtlasScheduler.schedule_custom("*/1 * * * *", ["semiconductor supply chain"])`; runs for 185 seconds; shuts down gracefully.
+- Dependencies: `AtlasScheduler`, `BriefingEngine`, `SynthesisAgent`, `GuardianAgent`, `EpisodicMemory`, A2A discovery.
+
 Other demos:
 - `scripts/verify_ollama.py`
 - `examples/langgraph_hello.py`
@@ -409,7 +473,7 @@ Other demos:
 - Packages: `services`, `examples`, `scripts`, `protocols`, `agents`, `orchestration`, `memory`, `observability`.
 - Dependencies include: `langgraph`, `langchain-ollama`, `beeai-framework`, `a2a-sdk`, `mcp`, `httpx`, `chromadb`, `sqlmodel`, `python-dotenv`.
 - `beeai-framework` is retained because `examples/beeai_hello.py` imports it; Atlas production agents use the custom `BaseAgent` pattern.
-- Scripts include: `atlas-memory-demo`, `atlas-synthesis-demo`, `atlas-edgar-demo`, `atlas-guardian-demo`.
+- Scripts include: `atlas-memory-demo`, `atlas-synthesis-demo`, `atlas-edgar-demo`, `atlas-guardian-demo`, `atlas-briefing-demo`, `atlas-scheduler-demo`.
 
 **.env.example**
 - `OLLAMA_BASE_URL=http://localhost:11434`
@@ -497,6 +561,17 @@ Other demos:
 - Added ADR-007 in `docs/DEVLOG.md` for confidence calibration, Guardian separation of concerns, and retry policy.
 - Verification: Ruff check, `examples/guardian_demo.py`, and full Guardian-enabled `examples/synthesis_demo.py` completed successfully.
 
+### Phase 8 — Scheduled Briefings
+- Created `services/briefing.py` with `BriefingEngine.generate_briefing()` over the full LangGraph + A2A + Guardian pipeline.
+- Created `services/briefing_templates.py` with pure `format_daily_briefing()` and `format_summary_line()` helpers.
+- Created `services/scheduler.py` with `AtlasScheduler` over APScheduler `AsyncIOScheduler`.
+- Created `examples/briefing_demo.py` for one immediate default-watchlist briefing.
+- Created `examples/scheduler_demo.py` for an autonomous 60-second cadence scheduler demo.
+- Modified `memory/episodic.py` to add scheduled-briefing metadata, SQLite migration helper, and `get_last_briefing(topic)`.
+- Modified `observability/run_logger.py` to persist scheduled-briefing metadata and per-topic summaries.
+- Modified `pyproject.toml` to add `atlas-briefing-demo` and `atlas-scheduler-demo`.
+- Verification: Ruff check, formatting smoke test, and import/memory smoke test completed successfully.
+
 ---
 
 ## Dependencies Between Files
@@ -542,6 +617,22 @@ examples/edgar_demo.py
 
 examples/guardian_demo.py
   -> agents/guardian/agent.py -> services/llm.py
+
+examples/briefing_demo.py
+  -> services/briefing.py
+    -> orchestration/graph.py
+      -> agents/synthesis/agent.py
+      -> agents/guardian/agent.py
+    -> memory/episodic.py
+    -> observability/run_logger.py
+  -> services/briefing_templates.py
+  -> protocols/a2a/server.py
+  -> agents/* specialist A2A servers
+
+examples/scheduler_demo.py
+  -> services/scheduler.py
+    -> services/briefing.py
+      -> LangGraph synthesis + Guardian pipeline
 ```
 
 ---
@@ -569,6 +660,6 @@ examples/guardian_demo.py
 - Geopolitical live data MCP server not built; agent uses model knowledge.
 - Supply-chain live data MCP server not built; agent uses model knowledge.
 - Rust MCP servers built: `mcp-market-data`, `mcp-edgar`; future MCP servers remain unbuilt.
-- Observability is minimal: JSON run logging exists, OpenTelemetry spans are not wired yet.
+- Observability is minimal: JSON run logging and scheduled briefing metadata exist, OpenTelemetry spans are not wired yet.
 
 `memory/` is no longer a stub as of Phase 5. `agents/research/` is no longer a stub as of Phase 6. `agents/guardian/` is no longer a stub as of Phase 7.

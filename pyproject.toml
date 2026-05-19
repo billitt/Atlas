@@ -47,6 +47,8 @@ atlas-synthesis-demo = "examples.synthesis_demo:main"
 atlas-memory-demo = "examples.memory_demo:main"
 atlas-edgar-demo = "examples.edgar_demo:main"
 atlas-guardian-demo = "examples.guardian_demo:main"
+atlas-briefing-demo = "examples.briefing_demo:main"
+atlas-scheduler-demo = "examples.scheduler_demo:main"
 
 [build-system]
 requires = ["hatchling"]

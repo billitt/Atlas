@@ -498,3 +498,46 @@ python -m examples.synthesis_demo
 - Guardian flags can be persisted and audited in run logs and episodic memory.
 - A single retry avoids infinite loops and controls local Granite runtime cost.
 - Future phases can route Guardian failures to human review or targeted specialist re-query without changing the verdict schema.
+
+---
+
+## Phase 8 — Scheduled briefings
+
+**Goal:** Generate Atlas intelligence briefings automatically from a watchlist or cron schedule.
+
+### Added
+
+| Path | Purpose |
+|------|---------|
+| `services/briefing.py` | `BriefingEngine` that runs one full synthesis + Guardian pipeline per topic |
+| `services/briefing_templates.py` | Pure formatting helpers for daily briefings and summary lines |
+| `services/scheduler.py` | `AtlasScheduler` wrapper around APScheduler's `AsyncIOScheduler` |
+| `examples/briefing_demo.py` | Immediate scheduled-style briefing demo using the default watchlist |
+| `examples/scheduler_demo.py` | Autonomous scheduler demo using a 60-second cron cadence for 3 minutes |
+
+### Modified
+
+| Path | Change |
+|------|--------|
+| `memory/episodic.py` | Adds `briefing_type`, `topics`, `delta_from_last`, SQLite migration helper, and `get_last_briefing(topic)` |
+| `observability/run_logger.py` | Adds scheduled-briefing fields to run JSON payloads |
+| `pyproject.toml` | Adds `atlas-briefing-demo` and `atlas-scheduler-demo` scripts |
+
+### Implementation notes
+
+- `BriefingEngine.generate_briefing()` defaults to `["semiconductor supply chain", "US-China trade tensions", "major market movements", "SEC filing activity"]`.
+- Each topic becomes a synthesis graph invocation, so it goes through planner, A2A specialists, synthesis, Guardian validation, run logging, and episodic memory.
+- `BriefingEngine` computes deterministic deltas from `EpisodicMemory.get_last_briefing(topic)` before running the next topic.
+- `AtlasScheduler` uses `AsyncIOScheduler` because Atlas agent pipelines are async.
+- The scheduler prints `format_summary_line()` after each generated briefing.
+- Formatting functions are pure: no LLM calls, no data fetching, no memory writes.
+
+### Verification
+
+- `python -m ruff check services\briefing.py services\briefing_templates.py services\scheduler.py examples\briefing_demo.py examples\scheduler_demo.py memory\episodic.py observability\run_logger.py` completed successfully.
+- Briefing template smoke test completed successfully.
+- Import and memory smoke test completed successfully, including `EpisodicMemory.get_last_briefing("semiconductor supply chain")`.
+
+### Phase 8 outcome
+
+**Complete** when `examples/briefing_demo.py` can generate a full watchlist briefing and `examples/scheduler_demo.py` can schedule autonomous recurring briefings.
