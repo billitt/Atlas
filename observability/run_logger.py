@@ -20,6 +20,12 @@ def save_run(run_data: dict[str, Any]) -> Path:
     payload = {
         "timestamp": timestamp,
         "query": run_data.get("query"),
+        "rule_id": run_data.get("rule_id"),
+        "rule_name": run_data.get("rule_name"),
+        "severity": run_data.get("severity"),
+        "summary": run_data.get("summary"),
+        "evidence": run_data.get("evidence"),
+        "alert_result": run_data.get("alert_result"),
         "briefing_type": run_data.get("briefing_type"),
         "topics": run_data.get("topics", []),
         "sections_count": run_data.get("sections_count"),

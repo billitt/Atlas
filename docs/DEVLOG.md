@@ -541,3 +541,44 @@ python -m examples.synthesis_demo
 ### Phase 8 outcome
 
 **Complete** when `examples/briefing_demo.py` can generate a full watchlist briefing and `examples/scheduler_demo.py` can schedule autonomous recurring briefings.
+
+---
+
+## Phase 9 — Real-time monitoring and alerts
+
+**Goal:** Add continuous watch loops that fire alerts when market or filing conditions change.
+
+### Added
+
+| Path | Purpose |
+|------|---------|
+| `services/alerts.py` | `AlertRule`, `AlertResult`, and `AlertEngine` for MCP-backed alert checks |
+| `services/alert_defaults.py` | Default rules for major market moves and SEC filing activity |
+| `services/alert_watch.py` | Async `AlertWatcher` loop and console alert formatter |
+| `examples/alert_demo.py` | Single-check alert demo |
+| `examples/alert_watch_demo.py` | 60-second watch-loop demo for 3 minutes |
+
+### Modified
+
+| Path | Change |
+|------|--------|
+| `memory/episodic.py` | Expands `AlertRecord`, adds alert table migration, and adds `log_alert(alert_result)` |
+| `observability/run_logger.py` | Adds alert metadata fields to run JSON payloads |
+| `pyproject.toml` | Adds `atlas-alert-demo` and `atlas-alert-watch-demo` scripts |
+
+### Implementation notes
+
+- `AlertEngine.check_rule()` fetches fresh MCP data, asks Granite for a structured trigger decision, respects rule cooldowns, and persists triggered alerts.
+- Market rules call `mcp-market-data` `get_quote` for watchlist symbols.
+- Filing rules call `mcp-edgar` `company_filings` for watched companies.
+- Triggered alerts get a short Granite context note but do not run the full synthesis briefing pipeline; this keeps watch loops lightweight on local hardware.
+- `AlertWatcher.start()` runs until stopped or cancelled and handles `CancelledError` cleanly.
+
+### Verification
+
+- `python -m ruff check services\alerts.py services\alert_defaults.py services\alert_watch.py examples\alert_demo.py examples\alert_watch_demo.py memory\episodic.py observability\run_logger.py` completed successfully.
+- Phase 9 import smoke test completed successfully and loaded default rules `major_market_move` and `filing_activity`.
+
+### Phase 9 outcome
+
+**Complete** when `examples/alert_demo.py` can run default rules once and `examples/alert_watch_demo.py` can run a lightweight continuous watch loop.

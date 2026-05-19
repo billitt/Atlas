@@ -49,6 +49,8 @@ atlas-edgar-demo = "examples.edgar_demo:main"
 atlas-guardian-demo = "examples.guardian_demo:main"
 atlas-briefing-demo = "examples.briefing_demo:main"
 atlas-scheduler-demo = "examples.scheduler_demo:main"
+atlas-alert-demo = "examples.alert_demo:main"
+atlas-alert-watch-demo = "examples.alert_watch_demo:main"
 
 [build-system]
 requires = ["hatchling"]

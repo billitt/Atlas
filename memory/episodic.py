@@ -31,10 +31,16 @@ class BriefingRecord(SQLModel, table=True):
 class AlertRecord(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     timestamp: datetime = Field(default_factory=datetime.now, index=True)
-    trigger: str = Field(index=True)
+    rule_id: str = Field(default="", index=True)
+    rule_name: str = Field(default="", index=True)
+    trigger: str = Field(default="", index=True)
     agent_chain: list[dict[str, Any]] = Field(default_factory=list, sa_column=Column(JSON))
-    assessment: str
+    assessment: str = ""
     severity: str = Field(index=True)
+    summary: str = ""
+    evidence: str = ""
+    context: str = ""
+    sources: list[dict[str, Any]] = Field(default_factory=list, sa_column=Column(JSON))
 
 
 class AgentExecution(SQLModel, table=True):
@@ -59,6 +65,7 @@ class EpisodicMemory:
     def init_db(self) -> None:
         SQLModel.metadata.create_all(self.engine)
         self._migrate_briefing_record()
+        self._migrate_alert_record()
 
     def _migrate_briefing_record(self) -> None:
         inspector = inspect(self.engine)
@@ -69,6 +76,24 @@ class EpisodicMemory:
             "briefing_type": "ALTER TABLE briefingrecord ADD COLUMN briefing_type VARCHAR DEFAULT 'custom'",
             "topics": "ALTER TABLE briefingrecord ADD COLUMN topics JSON DEFAULT '[]'",
             "delta_from_last": "ALTER TABLE briefingrecord ADD COLUMN delta_from_last VARCHAR",
+        }
+        with self.engine.begin() as conn:
+            for column, statement in migrations.items():
+                if column not in columns:
+                    conn.execute(text(statement))
+
+    def _migrate_alert_record(self) -> None:
+        inspector = inspect(self.engine)
+        if "alertrecord" not in inspector.get_table_names():
+            return
+        columns = {column["name"] for column in inspector.get_columns("alertrecord")}
+        migrations = {
+            "rule_id": "ALTER TABLE alertrecord ADD COLUMN rule_id VARCHAR DEFAULT ''",
+            "rule_name": "ALTER TABLE alertrecord ADD COLUMN rule_name VARCHAR DEFAULT ''",
+            "summary": "ALTER TABLE alertrecord ADD COLUMN summary VARCHAR DEFAULT ''",
+            "evidence": "ALTER TABLE alertrecord ADD COLUMN evidence VARCHAR DEFAULT ''",
+            "context": "ALTER TABLE alertrecord ADD COLUMN context VARCHAR DEFAULT ''",
+            "sources": "ALTER TABLE alertrecord ADD COLUMN sources JSON DEFAULT '[]'",
         }
         with self.engine.begin() as conn:
             for column, statement in migrations.items():
@@ -115,6 +140,27 @@ class EpisodicMemory:
             result=result,
             confidence=confidence,
             duration_seconds=duration,
+        )
+        with Session(self.engine) as session:
+            session.add(record)
+            session.commit()
+            session.refresh(record)
+        return record
+
+    def log_alert(self, alert_result: dict[str, Any]) -> AlertRecord:
+        timestamp = _parse_timestamp(alert_result.get("triggered_at"))
+        record = AlertRecord(
+            timestamp=timestamp,
+            rule_id=str(alert_result.get("rule_id", "")),
+            rule_name=str(alert_result.get("rule_name", "")),
+            trigger=str(alert_result.get("summary", "")),
+            agent_chain=[{"agent": "alert_engine", "rule_id": alert_result.get("rule_id")}],
+            assessment=str(alert_result.get("context", "")),
+            severity=str(alert_result.get("severity", "LOW")),
+            summary=str(alert_result.get("summary", "")),
+            evidence=str(alert_result.get("evidence", "")),
+            context=str(alert_result.get("context", "")),
+            sources=alert_result.get("sources") or [],
         )
         with Session(self.engine) as session:
             session.add(record)

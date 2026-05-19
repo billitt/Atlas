@@ -2,7 +2,7 @@
 
 This file is maintained by Cursor after each phase. Claude reads it to understand the codebase without re-reading every file. **Cursor: update this file at the end of every phase.**
 
-Last updated: Phase 8 (2026-05-18)
+Last updated: Phase 9 (2026-05-18)
 
 ---
 
@@ -10,11 +10,11 @@ Last updated: Phase 8 (2026-05-18)
 
 | Metric | Value |
 |--------|-------|
-| Commits | 16 |
-| Total files | 93 |
+| Commits | 17 |
+| Total files | 98 |
 | Rust LOC | 959 |
-| Python LOC | 3,134 |
-| Phases complete | 0, 1A, 1B, 2, 3, 4, 5, 6, 7, 8 |
+| Python LOC | 3,560 |
+| Phases complete | 0, 1A, 1B, 2, 3, 4, 5, 6, 7, 8, 9 |
 
 ---
 
@@ -58,6 +58,13 @@ Scheduled briefing flow:
         -> LangGraph Synthesis workflow (plan -> delegate -> synthesize -> guardian)
       -> briefing templates (services/briefing_templates.py)
       -> Run Logger + Episodic Memory
+
+Real-time alert flow:
+  AlertWatcher (services/alert_watch.py)
+    -> AlertEngine (services/alerts.py)
+      -> MCP market data :8001 and/or MCP EDGAR :8002
+      -> Granite evaluates alert condition as JSON
+      -> If triggered: quick context note, run log, AlertRecord in episodic memory
 
 Memory tiers:
   Tier 1 Semantic: ChromaDB persistent vectors in data/chroma
@@ -201,6 +208,46 @@ Memory tiers:
 - Dependencies: `apscheduler.schedulers.asyncio.AsyncIOScheduler`, `apscheduler.triggers.cron.CronTrigger`, `services.briefing.BriefingEngine`, `services.briefing_templates.format_summary_line`.
 - Called by: `examples/scheduler_demo.py`.
 
+**services/alerts.py** (205 lines)
+- Real-time alert engine over fresh MCP data.
+- Type aliases/classes:
+  - `Severity = Literal["HIGH", "MEDIUM", "LOW"]`
+  - `@dataclass AlertRule`: `id`, `name`, `description`, `watch_topic`, `condition_prompt`, `severity`, `cooldown_seconds`
+  - `class AlertResult(TypedDict)`: `rule_id`, `rule_name`, `severity`, `triggered_at`, `summary`, `evidence`, `context`, `sources`, `duration_seconds`
+  - `class AlertEngine`
+- `AlertEngine.__init__(synthesis_agent: SynthesisAgent | None, episodic_memory: EpisodicMemory, guardian: GuardianAgent | None, mcp_client: McpClient | dict[str, McpClient]) -> None`
+- `add_rule(rule: AlertRule) -> None`
+- `remove_rule(rule_id: str) -> None`
+- `list_rules() -> list[AlertRule]`
+- `async check_rule(rule: AlertRule) -> AlertResult | None`
+- `async check_all_rules() -> list[AlertResult]`
+- `_in_cooldown(rule: AlertRule) -> bool`
+- `async _fresh_data_for_rule(rule: AlertRule) -> dict[str, Any]`
+- `async _market_move_data(rule: AlertRule) -> dict[str, Any]`
+- `async _filing_activity_data(rule: AlertRule) -> dict[str, Any]`
+- `_client(key: str) -> McpClient`
+- Helpers: `_evaluate_condition(rule, fresh_data)`, `_quick_context(rule, fresh_data, verdict)`, `_extract_mcp_json(raw)`, `_extract_symbols(text)`, `_parse_json_from_llm(text)`.
+- Dependencies: `protocols.mcp.client.McpClient`, `services.llm.chat`, `memory.episodic.EpisodicMemory`, `observability.run_logger.save_run`.
+- Called by: `examples/alert_demo.py`, `examples/alert_watch_demo.py`, `services/alert_watch.py`.
+
+**services/alert_defaults.py** (30 lines)
+- Default alert rule factory.
+- `default_alert_rules() -> list[AlertRule]`
+- Rules: `major_market_move`, `filing_activity`.
+- Dependencies: `services.alerts.AlertRule`.
+- Called by: alert demos.
+
+**services/alert_watch.py** (52 lines)
+- Async watch loop for repeated alert checks.
+- `class AlertWatcher`
+- `__init__(alert_engine: AlertEngine, check_interval_seconds: int = 300) -> None`
+- `async start() -> None`
+- `stop() -> None`
+- `_on_alert(alert_result: AlertResult) -> None`
+- `format_alert(alert_result: dict[str, Any]) -> str`
+- Dependencies: `asyncio`, `services.alerts.AlertEngine`, `services.alerts.AlertResult`.
+- Called by: `examples/alert_watch_demo.py`.
+
 ### Memory
 
 **memory/semantic.py** (94 lines)
@@ -213,19 +260,21 @@ Memory tiers:
 - Helper: `_chunk_text(text: str, *, max_chars: int = 1200, overlap: int = 150) -> list[str]`
 - Dependencies: `chromadb.PersistentClient`, `services.embeddings.embed_texts`.
 
-**memory/episodic.py** (173 lines)
+**memory/episodic.py** (220 lines)
 - SQLite + SQLModel episodic memory.
 - DB path: `data/sqlite/atlas_episodic.db`.
 - Tables:
   - `BriefingRecord`: `id`, `timestamp`, `query`, `briefing_type`, `topics`, `plan`, `agent_results`, `final_briefing`, `confidence`, `sources`, `delta_from_last`, `trace_id`, `duration_seconds`.
-  - `AlertRecord`: `id`, `timestamp`, `trigger`, `agent_chain`, `assessment`, `severity`.
+  - `AlertRecord`: `id`, `timestamp`, `rule_id`, `rule_name`, `trigger`, `agent_chain`, `assessment`, `severity`, `summary`, `evidence`, `context`, `sources`.
   - `AgentExecution`: `id`, `timestamp`, `agent_name`, `task`, `result`, `confidence`, `duration_seconds`.
 - `class EpisodicMemory`
 - `__init__(db_path: str = DB_PATH) -> None`
 - `init_db() -> None`
 - `_migrate_briefing_record() -> None`
+- `_migrate_alert_record() -> None`
 - `log_briefing(run_data: dict[str, Any]) -> BriefingRecord`
 - `log_agent_execution(agent_name: str, task: str, result: dict[str, Any], confidence: str, duration: float | None) -> AgentExecution`
+- `log_alert(alert_result: dict[str, Any]) -> AlertRecord`
 - `query_briefings(query: str, limit: int = 10) -> list[BriefingRecord]`
 - `query_briefings_by_date(start: datetime, end: datetime) -> list[BriefingRecord]`
 - `get_confidence_history(topic: str, days: int = 90) -> list[dict[str, Any]]`
@@ -233,6 +282,7 @@ Memory tiers:
 - `briefing_count() -> int`
 - Phase 7: `log_briefing()` appends `guardian_verdict` into the existing `agent_results` JSON list as `{"agent": "guardian", "verdict": ...}` instead of adding a new column, avoiding SQLite migration churn during local demos.
 - Phase 8: `BriefingRecord` stores scheduled-briefing metadata; `_migrate_briefing_record()` adds new SQLite columns for existing local databases.
+- Phase 9: `AlertRecord` stores alert rule metadata, evidence, context, and sources; `_migrate_alert_record()` adds new SQLite columns for existing local databases.
 
 **memory/working.py** (30 lines)
 - Per-query scratchpad.
@@ -415,10 +465,10 @@ Memory tiers:
 
 ### Observability
 
-**observability/run_logger.py** (34 lines)
+**observability/run_logger.py** (40 lines)
 - `save_run(run_data: dict[str, Any]) -> Path`
 - Writes `runs/YYYYMMDD_HHMMSS.json`.
-- Payload keys: `timestamp`, `query`, `briefing_type`, `topics`, `sections_count`, `overall_risk_level`, `execution_plan`, `agent_results`, `sources`, `confidence`, `final_briefing`, `guardian_verdict`, `delta_from_last`, `per_topic`, `duration_seconds`, `memory_stats`.
+- Payload keys: `timestamp`, `query`, `rule_id`, `rule_name`, `severity`, `summary`, `evidence`, `alert_result`, `briefing_type`, `topics`, `sections_count`, `overall_risk_level`, `execution_plan`, `agent_results`, `sources`, `confidence`, `final_briefing`, `guardian_verdict`, `delta_from_last`, `per_topic`, `duration_seconds`, `memory_stats`.
 
 ### Examples / Scripts
 
@@ -460,6 +510,20 @@ Memory tiers:
 - Reuses `start_agent_servers()` and `wait_for_agent_cards()` from `examples.briefing_demo`; schedules `AtlasScheduler.schedule_custom("*/1 * * * *", ["semiconductor supply chain"])`; runs for 185 seconds; shuts down gracefully.
 - Dependencies: `AtlasScheduler`, `BriefingEngine`, `SynthesisAgent`, `GuardianAgent`, `EpisodicMemory`, A2A discovery.
 
+**examples/alert_demo.py** (41 lines)
+- Phase 9 single-check alert demo.
+- `async def run() -> None`
+- `def main() -> None`
+- Builds `AlertEngine` with market and EDGAR MCP clients, registers `default_alert_rules()`, runs `check_all_rules()` once, and prints triggered alerts with `format_alert()`.
+- Dependencies: `services.alerts.AlertEngine`, `services.alert_defaults.default_alert_rules`, `services.alert_watch.format_alert`, `protocols.mcp.client.McpClient`, `memory.episodic.EpisodicMemory`.
+
+**examples/alert_watch_demo.py** (43 lines)
+- Phase 9 real-time watch-loop demo.
+- `async def run() -> None`
+- `def main() -> None`
+- Builds `AlertEngine`, registers 1-2 default rules, starts `AlertWatcher(check_interval_seconds=60)`, runs for 180 seconds, and handles `CancelledError` cleanly.
+- Dependencies: `services.alert_watch.AlertWatcher`, `services.alerts.AlertEngine`, `services.alert_defaults.default_alert_rules`, `protocols.mcp.client.McpClient`, `memory.episodic.EpisodicMemory`.
+
 Other demos:
 - `scripts/verify_ollama.py`
 - `examples/langgraph_hello.py`
@@ -473,7 +537,7 @@ Other demos:
 - Packages: `services`, `examples`, `scripts`, `protocols`, `agents`, `orchestration`, `memory`, `observability`.
 - Dependencies include: `langgraph`, `langchain-ollama`, `beeai-framework`, `a2a-sdk`, `mcp`, `httpx`, `chromadb`, `sqlmodel`, `python-dotenv`.
 - `beeai-framework` is retained because `examples/beeai_hello.py` imports it; Atlas production agents use the custom `BaseAgent` pattern.
-- Scripts include: `atlas-memory-demo`, `atlas-synthesis-demo`, `atlas-edgar-demo`, `atlas-guardian-demo`, `atlas-briefing-demo`, `atlas-scheduler-demo`.
+- Scripts include: `atlas-memory-demo`, `atlas-synthesis-demo`, `atlas-edgar-demo`, `atlas-guardian-demo`, `atlas-briefing-demo`, `atlas-scheduler-demo`, `atlas-alert-demo`, `atlas-alert-watch-demo`.
 
 **.env.example**
 - `OLLAMA_BASE_URL=http://localhost:11434`
@@ -572,6 +636,17 @@ Other demos:
 - Modified `pyproject.toml` to add `atlas-briefing-demo` and `atlas-scheduler-demo`.
 - Verification: Ruff check, formatting smoke test, and import/memory smoke test completed successfully.
 
+### Phase 9 — Real-time Monitoring and Alerts
+- Created `services/alerts.py` with `AlertRule`, `AlertResult`, `AlertEngine`, MCP fresh-data checks, Granite JSON alert evaluation, cooldown handling, alert persistence, and run logging.
+- Created `services/alert_defaults.py` with `major_market_move` and `filing_activity` rules.
+- Created `services/alert_watch.py` with `AlertWatcher` async loop and `format_alert()`.
+- Created `examples/alert_demo.py` for one-shot default rule checks.
+- Created `examples/alert_watch_demo.py` for a 60-second interval watch loop over 3 minutes.
+- Modified `memory/episodic.py` with expanded `AlertRecord`, `_migrate_alert_record()`, and `log_alert(alert_result)`.
+- Modified `observability/run_logger.py` to include alert metadata.
+- Modified `pyproject.toml` to add `atlas-alert-demo` and `atlas-alert-watch-demo`.
+- Verification: Ruff check and Phase 9 import smoke test completed successfully.
+
 ---
 
 ## Dependencies Between Files
@@ -633,6 +708,18 @@ examples/scheduler_demo.py
   -> services/scheduler.py
     -> services/briefing.py
       -> LangGraph synthesis + Guardian pipeline
+
+examples/alert_demo.py
+  -> services/alerts.py
+    -> protocols/mcp/client.py -> Rust MCP server :8001 / :8002
+    -> services/llm.py -> Ollama / Granite
+    -> memory/episodic.py -> AlertRecord
+    -> observability/run_logger.py
+
+examples/alert_watch_demo.py
+  -> services/alert_watch.py
+    -> services/alerts.py
+      -> MCP tools + Granite condition evaluation
 ```
 
 ---
