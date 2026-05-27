@@ -686,3 +686,45 @@ python -m examples.synthesis_demo
 
 **Complete** when `atlas query`, `atlas briefing`, `atlas alerts check`, `atlas status`, `atlas traces list`, and `atlas history` run against the existing Phase 0–10 stack.
 
+---
+
+## Phase 12 — Streamlit web dashboard
+
+**Goal:** Provide a visual interface over existing synthesis, briefing, alert, memory, and trace pipelines.
+
+### Added
+
+| Path | Purpose |
+|------|---------|
+| `ui/streamlit_app.py` | Main dashboard entry with sidebar navigation and system status |
+| `ui/runtime.py` | Shared status, prerequisites, agent auto-start, run-log lookup |
+| `ui/components.py` | Reusable badges, cards, source lists, span tree renderer |
+| `ui/pages/query.py` | Natural-language Q&A page |
+| `ui/pages/briefings.py` | Briefing generator and history viewer |
+| `ui/pages/alerts.py` | Alert check, watch loop, history feed |
+| `ui/pages/agent_status.py` | Ollama, MCP, agent, and memory status grid |
+| `ui/pages/trace_viewer.py` | Trace file browser with span tree and run-log link |
+
+### Modified
+
+| Path | Change |
+|------|--------|
+| `pyproject.toml` | Adds `atlas-dashboard` script and `ui` wheel package |
+| `README.md` | Dashboard launch instructions and page descriptions |
+
+### Implementation notes
+
+- Dashboard reuses `cli.main` status helpers, `examples._demo_infra` agent startup, and all existing pipelines — no new agent logic.
+- A2A servers start once per Streamlit session and stay in background.
+- Pages show warnings (not crashes) when Ollama or MCP services are unavailable.
+- Trace viewer links back to `runs/` via `trace_id`.
+
+### Verification
+
+- `python -m ruff check ui/` completed successfully.
+- `atlas-dashboard` / `streamlit run ui/streamlit_app.py` launches the app.
+
+### Phase 12 outcome
+
+**Complete** when the dashboard loads all five pages and query/briefing/alerts integrate with the existing Phase 0–11 stack.
+

@@ -10,7 +10,7 @@ See [docs/DEVLOG.md](docs/DEVLOG.md) for implementation notes and ADRs. See [CLA
 
 ## Current Status
 
-Phases **0–11 are implemented and demo-verified**.
+Phases **0–12 are implemented and demo-verified**.
 
 | Phase | Status | What Works |
 |-------|--------|------------|
@@ -27,11 +27,12 @@ Phases **0–11 are implemented and demo-verified**.
 | 9 | Complete | Real-time alert monitoring via `AlertEngine` and `AlertWatcher` |
 | 10 | Complete | OpenTelemetry tracing across graph, agents, MCP, A2A, briefings, and alerts |
 | 11 | Complete | Typer CLI (`atlas`) for query, briefing, alerts, status, traces, and history |
+| 12 | Complete | Streamlit web dashboard (`atlas-dashboard`) with query, briefings, alerts, status, traces |
 
 ## Architecture Snapshot
 
 ```text
-User (Typer CLI: atlas query / briefing / alerts / status / traces / history)
+User (Typer CLI `atlas` / Streamlit dashboard `atlas-dashboard`)
   -> LangGraph Synthesis workflow (or BriefingEngine / AlertEngine)
   -> Synthesis Agent creates execution plan with Granite
   -> A2A delegates tasks to specialist agents
@@ -128,7 +129,31 @@ atlas-alert-demo
 atlas-alert-watch-demo
 atlas-tracing-demo
 atlas
+atlas-dashboard
 ```
+
+## Web Dashboard
+
+Launch the Streamlit dashboard:
+
+```powershell
+atlas-dashboard
+# or: streamlit run ui/streamlit_app.py
+```
+
+Opens a dark-themed wide-layout app at `http://localhost:8501` with five pages:
+
+| Page | Purpose |
+|------|---------|
+| **Query** | Natural-language synthesis with Guardian verdict, sources, trace link |
+| **Briefings** | Generate daily/weekly/custom briefings; browse episodic history |
+| **Alerts** | Check rules, optional watch loop, alert history feed |
+| **Agent Status** | Ollama, MCP, A2A agent cards, memory stats grid |
+| **Trace Viewer** | Browse `data/traces/` span trees with duration highlighting |
+
+The sidebar shows live system status (Ollama, MCP, memory counts) and auto-starts A2A agents on first load. Query and Briefing pages require Ollama + MCP servers; other pages degrade gracefully with warnings.
+
+**Visual layout:** dark background, colored confidence badges (green/yellow/red), bordered agent cards, expandable analysis sections, and dataframe history tables.
 
 ## CLI Usage
 
@@ -271,6 +296,14 @@ python -m examples.tracing_demo
 ### Phase 11 — Typer CLI
 
 The CLI replaces example scripts for day-to-day use. See [CLI Usage](#cli-usage) above.
+
+### Phase 12 — Streamlit Web Dashboard
+
+Visual interface over the same pipelines. See [Web Dashboard](#web-dashboard) above.
+
+```powershell
+atlas-dashboard
+```
 
 ## Full Chain of Command
 

@@ -2,7 +2,7 @@
 
 This file is maintained by Cursor after each phase. Claude reads it to understand the codebase without re-reading every file. **Cursor: update this file at the end of every phase.**
 
-Last updated: Phase 11 (2026-05-27)
+Last updated: Phase 12 (2026-05-27)
 
 ---
 
@@ -11,17 +11,17 @@ Last updated: Phase 11 (2026-05-27)
 | Metric | Value |
 |--------|-------|
 | Commits | 19 |
-| Total files | 114 |
+| Total files | 134 |
 | Rust LOC | 1,092 |
-| Python LOC | 5,601 |
-| Phases complete | 0, 1A, 1B, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11 |
+| Python LOC | 6,558 |
+| Phases complete | 0, 1A, 1B, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 |
 
 ---
 
 ## Architecture Summary
 
 ```text
-User (Typer CLI: atlas query / briefing / alerts / status / traces / history)
+User (Typer CLI `atlas` / Streamlit dashboard `ui/streamlit_app.py`)
   -> LangGraph Synthesis workflow (orchestration/graph.py)
     -> Synthesis Agent (agents/synthesis/agent.py)
       -> Planner (agents/synthesis/planner.py) creates DAG plan from Agent Cards
@@ -522,6 +522,40 @@ Memory tiers:
 - `format_history_row(record: dict) -> str`
 - Uses `typer.style` ANSI colors: GREEN=HIGH/pass, YELLOW=MEDIUM, RED=LOW/HIGH severity
 
+### UI — Streamlit Dashboard
+
+**ui/streamlit_app.py**
+- `run_dashboard() -> None` — page config, sidebar nav, auto-start A2A agents, route to pages
+- `render_sidebar_status() -> None` — compact Ollama/MCP/memory status in sidebar
+- `main() -> None` — launches `streamlit run` for `atlas-dashboard` entry point
+- `PAGES: dict[str, Callable[[], None]]` — Query, Briefings, Alerts, Agent Status, Trace Viewer
+
+**ui/runtime.py**
+- `get_status() -> dict[str, Any]` — wraps `cli.main._collect_status()`
+- `get_ollama_vram() -> str | None` — Ollama `/api/ps` VRAM summary
+- `check_prerequisites(*, require_mcp, require_ollama) -> tuple[bool, list[str]]`
+- `show_prerequisite_warnings(...) -> bool` — display st.warning for missing services
+- `ensure_agent_runtime() -> list[dict]` — session-scoped A2A server startup
+- `get_agent_cards() -> list[dict]`, `build_synthesis_stack()`, `build_alert_engine()`
+- `fetch_agent_cards_status() -> list[dict]` — probe `:9001`–`:9004` agent cards
+- `find_run_log_by_trace_id(trace_id: str) -> Path | None`
+
+**ui/components.py**
+- `confidence_badge(level: str) -> None`
+- `guardian_badge(passed: bool) -> None`
+- `severity_badge(severity: str) -> None`
+- `agent_status_card(name, port, reachable, skills) -> None`
+- `source_list(sources: list | dict) -> None`
+- `duration_color(duration_ms: float) -> str`
+- `render_span_tree(nodes: list[dict], *, depth: int = 0) -> None`
+- `service_down_message(title: str, detail: str) -> None`
+
+**ui/pages/query.py** — `render() -> None` — synthesis Q&A with Guardian, sources, trace link
+**ui/pages/briefings.py** — `render() -> None` — generate briefings + episodic history table
+**ui/pages/alerts.py** — `render() -> None` — check rules, watch fragment, alert history feed
+**ui/pages/agent_status.py** — `render() -> None` — Ollama/MCP/agent/memory status grid
+**ui/pages/trace_viewer.py** — `render() -> None` — trace list, span tree, run-log link
+
 ### Examples / Scripts
 
 **examples/_demo_infra.py**
@@ -600,7 +634,7 @@ Other demos:
 - Packages: `services`, `examples`, `scripts`, `protocols`, `agents`, `orchestration`, `memory`, `observability`.
 - Dependencies include: `langgraph`, `langchain-ollama`, `beeai-framework`, `a2a-sdk`, `mcp`, `httpx`, `chromadb`, `sqlmodel`, `python-dotenv`.
 - `beeai-framework` is retained because `examples/beeai_hello.py` imports it; Atlas production agents use the custom `BaseAgent` pattern.
-- Scripts include: `atlas-memory-demo`, `atlas-synthesis-demo`, `atlas-edgar-demo`, `atlas-guardian-demo`, `atlas-briefing-demo`, `atlas-scheduler-demo`, `atlas-alert-demo`, `atlas-alert-watch-demo`, `atlas-tracing-demo`.
+- Scripts include: `atlas-memory-demo`, `atlas-synthesis-demo`, `atlas-edgar-demo`, `atlas-guardian-demo`, `atlas-briefing-demo`, `atlas-scheduler-demo`, `atlas-alert-demo`, `atlas-alert-watch-demo`, `atlas-tracing-demo`, `atlas`, `atlas-dashboard`.
 
 **.env.example**
 - `OLLAMA_BASE_URL=http://localhost:11434`
@@ -744,6 +778,16 @@ Other demos:
 - Added Phase 11 entry in `docs/DEVLOG.md`.
 - Verification: Ruff check, `atlas --help`, and `atlas status` smoke test completed successfully.
 
+### Phase 12 — Streamlit Web Dashboard
+- Created `ui/streamlit_app.py` with sidebar navigation, system status, and `run_dashboard()`.
+- Created `ui/runtime.py` with prerequisites checks, session-scoped A2A auto-start, and status helpers.
+- Created `ui/components.py` with confidence/guardian/severity badges, agent cards, source lists, span tree renderer.
+- Created `ui/pages/query.py`, `briefings.py`, `alerts.py`, `agent_status.py`, `trace_viewer.py`.
+- Modified `pyproject.toml` — adds `atlas-dashboard` and `ui` package.
+- Modified `README.md` — dashboard section and Phase 12 status.
+- Added Phase 12 entry in `docs/DEVLOG.md`.
+- Verification: Ruff check and UI import smoke test completed successfully.
+
 ---
 
 ## Dependencies Between Files
@@ -829,6 +873,15 @@ cli/main.py
   -> memory/semantic.py (status)
   -> observability/trace_reader.py (traces commands)
   -> observability/run_logger.py + observability/tracing.py (query)
+
+ui/streamlit_app.py
+  -> ui/runtime.py -> cli/main.py + examples/_demo_infra.py
+  -> ui/components.py
+  -> ui/pages/query.py -> orchestration/graph.py, observability/run_logger.py, memory/episodic.py
+  -> ui/pages/briefings.py -> services/briefing.py, memory/episodic.py
+  -> ui/pages/alerts.py -> services/alerts.py, services/alert_defaults.py
+  -> ui/pages/agent_status.py -> ui/runtime.py
+  -> ui/pages/trace_viewer.py -> observability/trace_reader.py, ui/runtime.py
 ```
 
 ---
@@ -851,10 +904,8 @@ cli/main.py
 ## What's Stubbed / Not Yet Built
 
 - `ingestion/` — empty package only.
-- `ui/` — empty package only.
 - Geopolitical live data MCP server not built; agent uses model knowledge.
 - Supply-chain live data MCP server not built; agent uses model knowledge.
 - Rust MCP servers built: `mcp-market-data`, `mcp-edgar`; future MCP servers remain unbuilt.
-- `ui/` and `cli/` — `cli/` is no longer a stub as of Phase 11; `ui/` remains empty for Phase 12 Streamlit viewer.
 
-`memory/` is no longer a stub as of Phase 5. `agents/research/` is no longer a stub as of Phase 6. `agents/guardian/` is no longer a stub as of Phase 7. `observability/` is no longer a stub as of Phase 10 (OTel tracing + run logging + trace reader).
+`memory/` is no longer a stub as of Phase 5. `agents/research/` is no longer a stub as of Phase 6. `agents/guardian/` is no longer a stub as of Phase 7. `observability/` is no longer a stub as of Phase 10. `cli/` is no longer a stub as of Phase 11. `ui/` is no longer a stub as of Phase 12 (Streamlit dashboard).

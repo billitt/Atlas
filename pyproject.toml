@@ -54,13 +54,14 @@ atlas-scheduler-demo = "examples.scheduler_demo:main"
 atlas-alert-demo = "examples.alert_demo:main"
 atlas-alert-watch-demo = "examples.alert_watch_demo:main"
 atlas-tracing-demo = "examples.tracing_demo:main"
+atlas-dashboard = "ui.streamlit_app:main"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["services", "examples", "scripts", "protocols", "agents", "orchestration", "memory", "observability", "cli"]
+packages = ["services", "examples", "scripts", "protocols", "agents", "orchestration", "memory", "observability", "cli", "ui"]
 
 [tool.ruff]
 line-length = 100
