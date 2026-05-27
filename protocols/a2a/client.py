@@ -7,7 +7,10 @@ from typing import Any
 
 import httpx
 
+from observability.tracing import get_tracer
+
 JsonDict = dict[str, Any]
+_tracer = get_tracer("protocols.a2a")
 
 
 class A2AClient:
@@ -18,11 +21,7 @@ class A2AClient:
         self._next_id = 0
 
     async def discover(self, url: str) -> JsonDict:
-        """Fetch an Agent Card from `/.well-known/agent.json`.
-
-        Discovery is intentionally HTTP-native: a synthesis process only needs an
-        agent URL to learn what skills it offers and where to send tasks.
-        """
+        """Fetch an Agent Card from `/.well-known/agent.json`."""
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             response = await client.get(f"{url.rstrip('/')}/.well-known/agent.json")
             response.raise_for_status()
@@ -33,20 +32,28 @@ class A2AClient:
 
     async def send_task(self, url: str, message: str) -> JsonDict:
         """Delegate a text task to another agent via JSON-RPC `tasks/send`."""
-        result = await self._json_rpc(
-            url,
-            "tasks/send",
-            {
-                "id": str(uuid.uuid4()),
-                "message": {
-                    "role": "user",
-                    "parts": [{"kind": "text", "text": message}],
+        with _tracer.start_as_current_span("a2a.send_task") as span:
+            span.set_attribute("target_url", url)
+            span.set_attribute("task_summary", message[:500])
+            try:
+                card = await self.discover(url)
+                span.set_attribute("target_agent", str(card.get("name", url)))
+            except httpx.HTTPError:
+                span.set_attribute("target_agent", url)
+            result = await self._json_rpc(
+                url,
+                "tasks/send",
+                {
+                    "id": str(uuid.uuid4()),
+                    "message": {
+                        "role": "user",
+                        "parts": [{"kind": "text", "text": message}],
+                    },
                 },
-            },
-        )
-        if not isinstance(result, dict):
-            raise RuntimeError(f"unexpected tasks/send result: {result!r}")
-        return result
+            )
+            if not isinstance(result, dict):
+                raise RuntimeError(f"unexpected tasks/send result: {result!r}")
+            return result
 
     async def agent_card(self, url: str) -> JsonDict:
         """Fetch the card through the JSON-RPC method, not the well-known URL."""

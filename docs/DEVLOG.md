@@ -582,3 +582,69 @@ python -m examples.synthesis_demo
 ### Phase 9 outcome
 
 **Complete** when `examples/alert_demo.py` can run default rules once and `examples/alert_watch_demo.py` can run a lightweight continuous watch loop.
+
+---
+
+## Phase 10 — Full OpenTelemetry observability
+
+**Goal:** Make every briefing, alert, and query expandable into a full execution trace with agent calls, MCP fetches, LLM prompts, reflection loops, and timing.
+
+### Added
+
+| Path | Purpose |
+|------|---------|
+| `observability/tracing.py` | `init_tracing()`, `get_tracer()`, `get_current_trace_id()`, `traced()` decorator, `shutdown_tracing()` |
+| `observability/exporters.py` | Console, file (`data/traces/`), and optional Jaeger OTLP exporters |
+| `observability/trace_reader.py` | `list_traces()`, `load_trace()`, `format_trace_tree()` for Phase 12 trace viewer |
+| `examples/tracing_demo.py` | File-based tracing demo with printed execution tree |
+
+### Modified
+
+| Path | Change |
+|------|--------|
+| `orchestration/graph.py` | Spans on graph nodes; `run_synthesis_graph()` parent span |
+| `agents/base.py` | Spans on `agent.run`, `plan`, `execute`, `reflect` |
+| `services/llm.py` | Span on `chat()` with prompt/response lengths and model name |
+| `protocols/mcp/client.py` | Span on `call_tool()` |
+| `protocols/a2a/client.py` | Span on `send_task()` |
+| `agents/guardian/agent.py` | Span on `validate()` with claim counts |
+| `services/briefing.py` | Parent/topic spans; uses `run_synthesis_graph()` |
+| `services/alerts.py` | Span per `check_rule()` |
+| `observability/run_logger.py` | Adds `trace_id` linking run JSON to OTel trace |
+| `memory/episodic.py` | `BriefingRecord.trace_id` populated from run data |
+| `pyproject.toml` | Adds OTLP HTTP exporter dep and `atlas-tracing-demo` |
+| `.gitignore` | Ignores `data/traces/` |
+
+### Verification
+
+- `python -m ruff check observability examples/tracing_demo.py orchestration/graph.py agents/base.py services/llm.py protocols/mcp/client.py protocols/a2a/client.py agents/guardian/agent.py services/briefing.py services/alerts.py`
+- `python -m examples.tracing_demo` with Ollama and MCP servers running
+
+### Phase 10 outcome
+
+**Complete** when a synthesis run exports a JSON trace file, prints a human-readable span tree, and the run log includes a matching `trace_id`.
+
+---
+
+## ADR-010: Trace storage and retention
+
+**Status:** Accepted (Phase 10)
+
+**Context:** Atlas now runs multi-agent pipelines with reflection loops, MCP fetches, and Guardian validation. Portfolio demos need decision traceability without requiring a production observability stack.
+
+**Decision:**
+
+- Use OpenTelemetry spans across LangGraph nodes, agent lifecycle phases, LLM calls, MCP/A2A I/O, Guardian validation, briefings, and alerts.
+- Default export target is **console** (`OTEL_EXPORT_TO=console`) for local debugging.
+- Portfolio demos use **file-based JSON traces** in `data/traces/YYYYMMDD_HHMMSS.json` — one file per traced session, consumed by `trace_reader.py` and the future Streamlit viewer (Phase 12).
+- **Jaeger** is optional via OTLP HTTP when `OTEL_EXPORTER_OTLP_ENDPOINT` is configured.
+- Run logs in `runs/` store business-level summaries with a `trace_id` field linking to the OTel trace; episodic `BriefingRecord.trace_id` mirrors this.
+- No long-term trace retention policy in the demo stack; trace files are gitignored local artifacts.
+
+**Consequences:**
+
+- Every run can be expanded from summary JSON to full execution detail.
+- File traces work offline and air-gapped without Jaeger.
+- Production deployments can switch `OTEL_EXPORT_TO=jaeger` without changing instrumentation.
+- Phase 12 trace viewer can reuse `trace_reader.py` without parsing OTel protobuf.
+

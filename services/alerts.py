@@ -13,11 +13,13 @@ from agents.guardian.agent import GuardianAgent
 from agents.synthesis.agent import SynthesisAgent
 from memory.episodic import EpisodicMemory
 from observability.run_logger import save_run
+from observability.tracing import get_tracer
 from protocols.mcp.client import McpClient
 from services.llm import chat
 
 Severity = Literal["HIGH", "MEDIUM", "LOW"]
 JsonDict = dict[str, Any]
+_tracer = get_tracer("services.alerts")
 
 
 @dataclass
@@ -71,46 +73,52 @@ class AlertEngine:
         return list(self.rules.values())
 
     async def check_rule(self, rule: AlertRule) -> AlertResult | None:
-        if self._in_cooldown(rule):
-            print(f"[alerts] Skipping {rule.id}; cooldown active")
-            return None
+        with _tracer.start_as_current_span("alerts.check_rule") as span:
+            span.set_attribute("rule_id", rule.id)
+            span.set_attribute("severity", rule.severity)
+            if self._in_cooldown(rule):
+                print(f"[alerts] Skipping {rule.id}; cooldown active")
+                span.set_attribute("triggered", False)
+                return None
 
-        start = perf_counter()
-        fresh_data = await self._fresh_data_for_rule(rule)
-        verdict = _evaluate_condition(rule, fresh_data)
-        if not verdict.get("triggered"):
-            return None
+            start = perf_counter()
+            fresh_data = await self._fresh_data_for_rule(rule)
+            verdict = _evaluate_condition(rule, fresh_data)
+            triggered = bool(verdict.get("triggered"))
+            span.set_attribute("triggered", triggered)
+            if not triggered:
+                return None
 
-        context = _quick_context(rule, fresh_data, verdict)
-        triggered_at = datetime.now().isoformat(timespec="seconds")
-        result: AlertResult = {
-            "rule_id": rule.id,
-            "rule_name": rule.name,
-            "severity": rule.severity,
-            "triggered_at": triggered_at,
-            "summary": str(verdict.get("summary", "")).strip(),
-            "evidence": str(verdict.get("evidence", "")).strip(),
-            "context": context,
-            "sources": fresh_data.get("sources", []),
-            "duration_seconds": round(perf_counter() - start, 3),
-        }
-        self._last_fired_at[rule.id] = datetime.now()
-        self.episodic_memory.log_alert(result)
-        save_run(
-            {
-                "timestamp": triggered_at,
-                "query": rule.watch_topic,
+            context = _quick_context(rule, fresh_data, verdict)
+            triggered_at = datetime.now().isoformat(timespec="seconds")
+            result: AlertResult = {
                 "rule_id": rule.id,
                 "rule_name": rule.name,
                 "severity": rule.severity,
-                "summary": result["summary"],
-                "evidence": result["evidence"],
-                "sources": result["sources"],
-                "duration_seconds": result["duration_seconds"],
-                "alert_result": result,
+                "triggered_at": triggered_at,
+                "summary": str(verdict.get("summary", "")).strip(),
+                "evidence": str(verdict.get("evidence", "")).strip(),
+                "context": context,
+                "sources": fresh_data.get("sources", []),
+                "duration_seconds": round(perf_counter() - start, 3),
             }
-        )
-        return result
+            self._last_fired_at[rule.id] = datetime.now()
+            self.episodic_memory.log_alert(result)
+            save_run(
+                {
+                    "timestamp": triggered_at,
+                    "query": rule.watch_topic,
+                    "rule_id": rule.id,
+                    "rule_name": rule.name,
+                    "severity": rule.severity,
+                    "summary": result["summary"],
+                    "evidence": result["evidence"],
+                    "sources": result["sources"],
+                    "duration_seconds": result["duration_seconds"],
+                    "alert_result": result,
+                }
+            )
+            return result
 
     async def check_all_rules(self) -> list[AlertResult]:
         triggered: list[AlertResult] = []

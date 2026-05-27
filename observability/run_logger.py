@@ -7,6 +7,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from observability.tracing import get_current_trace_id
+
 
 def save_run(run_data: dict[str, Any]) -> Path:
     """Persist one run record to `runs/YYYYMMDD_HHMMSS.json`."""
@@ -17,10 +19,13 @@ def save_run(run_data: dict[str, Any]) -> Path:
     safe_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     path = runs_dir / f"{safe_timestamp}.json"
 
+    trace_id = run_data.get("trace_id") or get_current_trace_id()
     payload = {
         "timestamp": timestamp,
         **{k: v for k, v in run_data.items() if v is not None},
     }
+    if trace_id and "trace_id" not in payload:
+        payload["trace_id"] = trace_id
 
     path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
     print(f"[run_logger] Saved run to {path}")

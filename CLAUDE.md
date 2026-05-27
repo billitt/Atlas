@@ -2,7 +2,7 @@
 
 This file is maintained by Cursor after each phase. Claude reads it to understand the codebase without re-reading every file. **Cursor: update this file at the end of every phase.**
 
-Last updated: Phase 9.1 (2026-05-27)
+Last updated: Phase 10 (2026-05-27)
 
 ---
 
@@ -10,11 +10,11 @@ Last updated: Phase 9.1 (2026-05-27)
 
 | Metric | Value |
 |--------|-------|
-| Commits | 17 |
-| Total files | 98 |
-| Rust LOC | 959 |
-| Python LOC | 3,560 |
-| Phases complete | 0, 1A, 1B, 2, 3, 4, 5, 6, 7, 8, 9 |
+| Commits | 19 |
+| Total files | 112 |
+| Rust LOC | 1,092 |
+| Python LOC | 4,944 |
+| Phases complete | 0, 1A, 1B, 2, 3, 4, 5, 6, 7, 8, 9, 10 |
 
 ---
 
@@ -48,8 +48,11 @@ User query
       -> Guardian Agent validates grounding and confidence (agents/guardian/agent.py)
         -> If LOW confidence and guardian_retries <= 1, route back to synthesize
         -> Otherwise attach guardian_verdict and continue
-      -> Run Logger writes runs/YYYYMMDD_HHMMSS.json
-      -> Episodic Memory writes BriefingRecord
+      -> Run Logger writes runs/YYYYMMDD_HHMMSS.json (with trace_id)
+      -> Episodic Memory writes BriefingRecord (trace_id when tracing active)
+      -> OpenTelemetry spans (observability/tracing.py)
+        -> graph nodes, agent plan/execute/reflect, llm.chat, mcp.call_tool, a2a.send_task, guardian.validate
+        -> exported to console, data/traces/*.json, or Jaeger OTLP (optional)
 
 Scheduled briefing flow:
   APScheduler (services/scheduler.py)
@@ -160,7 +163,7 @@ Memory tiers:
 - Central Granite/Ollama chat config.
 - Constants: `OLLAMA_BASE_URL`, `OLLAMA_CHAT_MODEL`, `BEEAI_MODEL_NAME`.
 - `def get_chat_ollama(**kwargs: Any) -> ChatOllama`
-- `def chat(prompt: str) -> str`
+- `def chat(prompt: str) -> str` — wrapped in OTel span `llm.chat` with `prompt_length`, `response_length`, `model_name`
 - `def ollama_generate(prompt: str, *, model: str | None = None) -> str`
 - `def list_models() -> list[str]`
 
@@ -330,8 +333,9 @@ Memory tiers:
 
 **agents/base.py**
 - `class BaseAgent(ABC)`
+- Property: `agent_name: str` — short label for traces (`market`, `geopolitical`, etc.)
 - Abstract: `plan(query: str) -> Any`, `execute(query: str, plan: Any) -> AgentResult`, `reflect(query: str, draft: AgentResult) -> tuple[bool, str, Confidence]`
-- `run(query: str) -> AgentResult`
+- `run(query: str) -> AgentResult` — OTel spans: `agent.run`, `agent.plan`, `agent.execute`, `agent.reflect`
 - `AgentResult`: `analysis`, `sources`, `confidence`.
 
 **agents/market/agent.py** (279 lines)
@@ -457,18 +461,40 @@ Memory tiers:
 - Fields: `messages`, `query`, `agent_cards`, `plan`, `agent_results`, `sources`, `combined_analysis`, `confidence`, `briefing`, `guardian_verdict`, `guardian_retries`.
 - Reducers: `add_messages`, `merge_agent_results`, `merge_sources`.
 
-**orchestration/graph.py** (99 lines)
+**orchestration/graph.py**
 - `build_synthesis_graph(agent: SynthesisAgent, *, guardian: GuardianAgent | None = None, max_guardian_retries: int = 1)`
+- `async def run_synthesis_graph(app: Any, state: SynthesisState) -> SynthesisState` — parent span `synthesis.graph`
 - LangGraph DAG: `START -> plan -> delegate_to_agents -> synthesize -> guardian -> END`.
+- Each node wrapped in OTel span with attributes: `node_name`, `query`, `plan_step_count`, `agent_count`.
 - Conditional retry: `guardian` routes back to `synthesize` once when `guardian_verdict.overall_confidence == "LOW"`.
-- Internal nodes: `plan_node`, `delegate_to_agents_node`, `synthesize_node`, `guardian_node`, `guardian_route`.
 
 ### Observability
+
+**observability/tracing.py**
+- `init_tracing(service_name: str | None = None, export_to: str | None = None) -> TracerProvider`
+- `get_tracer(name: str) -> Tracer`
+- `get_current_trace_id() -> str | None` — hex trace id for run log linkage
+- `get_current_span_id() -> str | None`
+- `shutdown_tracing() -> None`
+- `traced(name: str | None = None)` — decorator wrapping sync/async functions in spans
+- Env: `OTEL_EXPORT_TO` (default `console`), `OTEL_SERVICE_NAME` (default `atlas`)
+
+**observability/exporters.py**
+- `create_console_exporter() -> SimpleSpanProcessor` — stdout via `ConsoleSpanExporter`
+- `create_file_exporter(path: Path | None = None) -> SimpleSpanProcessor` — JSON to `data/traces/YYYYMMDD_HHMMSS.json`
+- `create_jaeger_exporter() -> SimpleSpanProcessor` — OTLP HTTP when `OTEL_EXPORTER_OTLP_ENDPOINT` set
+- `get_active_trace_file() -> Path | None`
+- `FileSpanExporter` — custom exporter writing span arrays to JSON
+
+**observability/trace_reader.py**
+- `list_traces(directory: str = "data/traces/") -> list[dict[str, Any]]` — trace file metadata, newest first
+- `load_trace(filepath: str) -> dict[str, Any]` — parsed spans + span trees by trace_id
+- `format_trace_tree(trace: dict[str, Any], *, trace_id: str | None = None) -> str` — indented tree with timing
 
 **observability/run_logger.py**
 - `save_run(run_data: dict[str, Any]) -> Path`
 - Writes `runs/YYYYMMDD_HHMMSS.json`.
-- Persists all non-null keys from `run_data` plus a normalized `timestamp`; no hardcoded schema per run type.
+- Persists all non-null keys from `run_data`; auto-adds `trace_id` from active OTel context when missing.
 
 ### Examples / Scripts
 
@@ -528,6 +554,13 @@ Memory tiers:
 - Builds `AlertEngine`, registers 1-2 default rules, starts `AlertWatcher(check_interval_seconds=60)`, runs for 180 seconds, and handles `CancelledError` cleanly.
 - Dependencies: `services.alert_watch.AlertWatcher`, `services.alerts.AlertEngine`, `services.alert_defaults.default_alert_rules`, `protocols.mcp.client.McpClient`, `memory.episodic.EpisodicMemory`.
 
+**examples/tracing_demo.py**
+- Phase 10 OpenTelemetry tracing demo.
+- `async def run() -> None`
+- `def main() -> None`
+- Calls `init_tracing(export_to="file")`, runs full synthesis pipeline via `run_synthesis_graph()`, saves run log with `trace_id`, prints `format_trace_tree()` and trace file path.
+- Dependencies: `examples._demo_infra`, `observability.tracing`, `observability.trace_reader`, `orchestration.graph.run_synthesis_graph`.
+
 Other demos:
 - `scripts/verify_ollama.py`
 - `examples/langgraph_hello.py`
@@ -541,7 +574,7 @@ Other demos:
 - Packages: `services`, `examples`, `scripts`, `protocols`, `agents`, `orchestration`, `memory`, `observability`.
 - Dependencies include: `langgraph`, `langchain-ollama`, `beeai-framework`, `a2a-sdk`, `mcp`, `httpx`, `chromadb`, `sqlmodel`, `python-dotenv`.
 - `beeai-framework` is retained because `examples/beeai_hello.py` imports it; Atlas production agents use the custom `BaseAgent` pattern.
-- Scripts include: `atlas-memory-demo`, `atlas-synthesis-demo`, `atlas-edgar-demo`, `atlas-guardian-demo`, `atlas-briefing-demo`, `atlas-scheduler-demo`, `atlas-alert-demo`, `atlas-alert-watch-demo`.
+- Scripts include: `atlas-memory-demo`, `atlas-synthesis-demo`, `atlas-edgar-demo`, `atlas-guardian-demo`, `atlas-briefing-demo`, `atlas-scheduler-demo`, `atlas-alert-demo`, `atlas-alert-watch-demo`, `atlas-tracing-demo`.
 
 **.env.example**
 - `OLLAMA_BASE_URL=http://localhost:11434`
@@ -657,6 +690,26 @@ Other demos:
 - Simplified `observability/run_logger.py` to write all non-null `run_data` fields without a hardcoded schema.
 - Updated `README.md` to reflect Phases 0–9 as complete.
 
+### Phase 10 — Full OpenTelemetry Observability
+- Created `observability/tracing.py` with `init_tracing()`, `get_tracer()`, `get_current_trace_id()`, `traced()`, and `shutdown_tracing()`.
+- Created `observability/exporters.py` with console, file (`data/traces/`), and optional Jaeger OTLP exporters.
+- Created `observability/trace_reader.py` with `list_traces()`, `load_trace()`, and `format_trace_tree()`.
+- Created `examples/tracing_demo.py` for file-based trace export and printed execution tree.
+- Modified `orchestration/graph.py` — OTel spans on graph nodes; added `run_synthesis_graph()` parent span.
+- Modified `agents/base.py` — spans on `agent.run`, `plan`, `execute`, `reflect` with agent/attempt/confidence attributes.
+- Modified `services/llm.py` — span on `chat()` with prompt/response length and model name.
+- Modified `protocols/mcp/client.py` — span on `call_tool()`.
+- Modified `protocols/a2a/client.py` — span on `send_task()`.
+- Modified `agents/guardian/agent.py` — span on `validate()` with claim counts.
+- Modified `services/briefing.py` — parent/topic spans; uses `run_synthesis_graph()`.
+- Modified `services/alerts.py` — span per `check_rule()`.
+- Modified `observability/run_logger.py` — adds `trace_id` linking run JSON to OTel trace.
+- Modified `memory/episodic.py` — `BriefingRecord.trace_id` populated from run data (field existed; now wired).
+- Modified `pyproject.toml` — adds `opentelemetry-exporter-otlp-proto-http` and `atlas-tracing-demo`.
+- Modified `.gitignore` — ignores `data/traces/`.
+- Added ADR-010 in `docs/DEVLOG.md` for trace storage and retention policy.
+- Verification: Ruff check and tracing module smoke test completed successfully.
+
 ---
 
 ## Dependencies Between Files
@@ -721,7 +774,17 @@ examples/alert_demo.py
 examples/alert_watch_demo.py
   -> services/alert_watch.py
     -> services/alerts.py
+      -> observability/tracing.py (alerts.check_rule span)
       -> MCP tools + Granite condition evaluation
+
+examples/tracing_demo.py
+  -> observability/tracing.py (init_tracing export_to=file)
+  -> examples/_demo_infra.py
+  -> orchestration/graph.py (run_synthesis_graph)
+    -> observability/tracing.py (graph + agent + llm + mcp + a2a spans)
+  -> observability/trace_reader.py (format_trace_tree)
+  -> observability/run_logger.py (trace_id linkage)
+  -> memory/episodic.py
 ```
 
 ---
@@ -749,6 +812,6 @@ examples/alert_watch_demo.py
 - Geopolitical live data MCP server not built; agent uses model knowledge.
 - Supply-chain live data MCP server not built; agent uses model knowledge.
 - Rust MCP servers built: `mcp-market-data`, `mcp-edgar`; future MCP servers remain unbuilt.
-- Observability is minimal: JSON run logging and scheduled briefing metadata exist, OpenTelemetry spans are not wired yet.
+- `ui/` and `cli/` remain empty; Phase 12 Streamlit trace viewer will consume `trace_reader.py`.
 
-`memory/` is no longer a stub as of Phase 5. `agents/research/` is no longer a stub as of Phase 6. `agents/guardian/` is no longer a stub as of Phase 7.
+`memory/` is no longer a stub as of Phase 5. `agents/research/` is no longer a stub as of Phase 6. `agents/guardian/` is no longer a stub as of Phase 7. `observability/` is no longer a stub as of Phase 10 (OTel tracing + run logging + trace reader).

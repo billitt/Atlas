@@ -10,6 +10,8 @@ from dotenv import load_dotenv
 from langchain_core.messages import HumanMessage
 from langchain_ollama import ChatOllama
 
+from observability.tracing import get_tracer
+
 load_dotenv()
 
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
@@ -29,9 +31,15 @@ def get_chat_ollama(**kwargs: Any) -> ChatOllama:
 
 def chat(prompt: str) -> str:
     """Single-turn chat via LangChain; returns assistant text."""
-    llm = get_chat_ollama()
-    response = llm.invoke([HumanMessage(content=prompt)])
-    return str(response.content)
+    tracer = get_tracer("services.llm")
+    with tracer.start_as_current_span("llm.chat") as span:
+        span.set_attribute("prompt_length", len(prompt))
+        span.set_attribute("model_name", OLLAMA_CHAT_MODEL)
+        llm = get_chat_ollama()
+        response = llm.invoke([HumanMessage(content=prompt)])
+        text = str(response.content)
+        span.set_attribute("response_length", len(text))
+        return text
 
 
 def ollama_generate(prompt: str, *, model: str | None = None) -> str:

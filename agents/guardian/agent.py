@@ -7,10 +7,13 @@ import re
 from datetime import datetime
 from typing import Any, Literal, TypedDict
 
+from observability.tracing import get_tracer
+
 from services.llm import chat
 
 Confidence = Literal["HIGH", "MEDIUM", "LOW"]
 JsonDict = dict[str, Any]
+_tracer = get_tracer("agents.guardian")
 
 
 class ClaimCheck(TypedDict):
@@ -40,7 +43,9 @@ class GuardianAgent:
         sources: list[JsonDict],
     ) -> GuardianVerdict:
         """Run one Granite validation pass and return a structured verdict."""
-        prompt = f"""You are the Atlas Guardian Agent.
+        with _tracer.start_as_current_span("guardian.validate") as span:
+            span.set_attribute("query", query[:500])
+            prompt = f"""You are the Atlas Guardian Agent.
 You are a second-pass validator, not a content generator. Do NOT fix or rewrite
 the briefing. Validate it, flag problems, and assign confidence.
 
@@ -90,12 +95,20 @@ Return ONLY valid JSON matching this schema:
   "summary": "short validation summary"
 }}
 """
-        raw = chat(prompt)
-        try:
-            parsed = _parse_json_from_llm(raw)
-        except json.JSONDecodeError:
-            return _fallback_verdict(f"Guardian returned malformed JSON: {raw[:300]}")
-        return _normalize_verdict(parsed)
+            raw = chat(prompt)
+            try:
+                parsed = _parse_json_from_llm(raw)
+            except json.JSONDecodeError:
+                verdict = _fallback_verdict(f"Guardian returned malformed JSON: {raw[:300]}")
+            else:
+                verdict = _normalize_verdict(parsed)
+            claim_checks = verdict.get("claim_checks") or []
+            flagged = sum(1 for check in claim_checks if not check.get("grounded"))
+            span.set_attribute("claims_checked", len(claim_checks))
+            span.set_attribute("claims_flagged", flagged)
+            span.set_attribute("overall_confidence", verdict.get("overall_confidence", "LOW"))
+            span.set_attribute("passed", bool(verdict.get("passed", False)))
+            return verdict
 
 
 def _parse_json_from_llm(text: str) -> JsonDict:

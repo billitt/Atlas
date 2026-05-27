@@ -27,6 +27,7 @@ dependencies = [
     # Observability
     "opentelemetry-api>=1.29",
     "opentelemetry-sdk>=1.29",
+    "opentelemetry-exporter-otlp-proto-http>=1.29",
     # Config
     "python-dotenv>=1.0",
 ]
@@ -51,6 +52,7 @@ atlas-briefing-demo = "examples.briefing_demo:main"
 atlas-scheduler-demo = "examples.scheduler_demo:main"
 atlas-alert-demo = "examples.alert_demo:main"
 atlas-alert-watch-demo = "examples.alert_watch_demo:main"
+atlas-tracing-demo = "examples.tracing_demo:main"
 
 [build-system]
 requires = ["hatchling"]

@@ -8,6 +8,10 @@ from typing import Any
 
 import httpx
 
+from observability.tracing import get_tracer
+
+_tracer = get_tracer("protocols.mcp")
+
 
 class McpClient:
     """HTTP client for MCP servers that expose a single POST /mcp JSON-RPC endpoint."""
@@ -60,13 +64,18 @@ class McpClient:
 
     async def call_tool(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         """Invoke a tool by name with JSON arguments."""
-        result = await self._request(
-            "tools/call",
-            {"name": name, "arguments": arguments},
-        )
-        if not isinstance(result, dict):
-            raise RuntimeError(f"unexpected tools/call result: {result!r}")
-        return result
+        with _tracer.start_as_current_span("mcp.call_tool") as span:
+            span.set_attribute("tool_name", name)
+            span.set_attribute("server_url", self.base_url)
+            span.set_attribute("arguments", json.dumps(arguments)[:2000])
+            result = await self._request(
+                "tools/call",
+                {"name": name, "arguments": arguments},
+            )
+            if not isinstance(result, dict):
+                raise RuntimeError(f"unexpected tools/call result: {result!r}")
+            span.set_attribute("response_size", len(json.dumps(result)))
+            return result
 
 
 async def main() -> None:
