@@ -1,0 +1,45 @@
+{
+  "scenario_name": "taiwan_strait_escalation",
+  "source": "simulated_un_comtrade",
+  "description": "Simulated semiconductor trade flow and dependency data for Taiwan Strait demo",
+  "entities": ["Taiwan", "TSMC", "EU", "United States", "ASML", "semiconductor"],
+  "commodities": [
+    {
+      "name": "advanced logic chips (<7nm)",
+      "top_exporter": "Taiwan (TSMC)",
+      "eu_import_share_percent": 68,
+      "us_import_share_percent": 72,
+      "notes": "EU and US auto, AI, and defense electronics rely on Taiwan fabs for leading-edge nodes."
+    },
+    {
+      "name": "wafer fabrication equipment (EUV lithography)",
+      "top_exporter": "Netherlands (ASML)",
+      "taiwan_destination_share_percent": 41,
+      "notes": "ASML shipments to Taiwan fabs are a critical bottleneck for advanced capacity expansion."
+    },
+    {
+      "name": "mature-node PMIC / MCU",
+      "top_exporter": "Taiwan",
+      "global_auto_dependency": "HIGH",
+      "notes": "Secondary chokepoint if strait logistics degrade even without fab damage."
+    }
+  ],
+  "chokepoints": [
+    {
+      "name": "TSMC Hsinchu advanced fabs",
+      "share_of_global_advanced_chips_percent": 90,
+      "impact_if_disrupted": "Global AI accelerator and smartphone SoC production severely constrained within weeks."
+    },
+    {
+      "name": "Taiwan Strait shipping lanes",
+      "share_of_asia_pacific_container_routes": 35,
+      "impact_if_disrupted": "Delayed equipment imports, outbound finished wafer shipments, and packaging material flows."
+    },
+    {
+      "name": "Kaohsiung export terminals",
+      "role": "semiconductor outbound logistics hub",
+      "impact_if_disrupted": "Inventory accumulation at fabs, customer allocation disputes, spot price spikes."
+    }
+  ],
+  "dependency_summary": "EU and US supply chains show HIGH structural dependency on Taiwan for advanced semiconductors. TSMC Hsinchu fabs produce approximately 90% of the world's sub-7nm chips. Cross-strait tension elevates substitution risk because alternative capacity (US, Japan, Korea) lacks equivalent leading-edge volume before 2028–2030 in most planning scenarios."
+}

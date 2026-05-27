@@ -10,7 +10,7 @@ See [docs/DEVLOG.md](docs/DEVLOG.md) for implementation notes and ADRs. See [CLA
 
 ## Current Status
 
-Phases **0–12 are implemented and demo-verified**.
+Phases **0–13 are implemented and demo-verified**.
 
 | Phase | Status | What Works |
 |-------|--------|------------|
@@ -28,6 +28,7 @@ Phases **0–12 are implemented and demo-verified**.
 | 10 | Complete | OpenTelemetry tracing across graph, agents, MCP, A2A, briefings, and alerts |
 | 11 | Complete | Typer CLI (`atlas`) for query, briefing, alerts, status, traces, and history |
 | 12 | Complete | Streamlit web dashboard (`atlas-dashboard`) with query, briefings, alerts, status, traces |
+| 13 | Complete | Taiwan Strait end-to-end demo scenario with seed data, `atlas-taiwan-demo`, and interview script |
 
 ## Architecture Snapshot
 
@@ -37,8 +38,8 @@ User (Typer CLI `atlas` / Streamlit dashboard `atlas-dashboard`)
   -> Synthesis Agent creates execution plan with Granite
   -> A2A delegates tasks to specialist agents
   -> Market Agent (:9001) -> Rust MCP market data (:8001) -> Yahoo Finance
-  -> Geopolitical Agent (:9002) -> Granite model knowledge
-  -> Supply Chain Agent (:9003) -> Granite model knowledge
+  -> Geopolitical Agent (:9002) -> semantic memory seed + Granite model knowledge
+  -> Supply Chain Agent (:9003) -> semantic memory seed + Granite model knowledge
   -> Research & Filing Agent (:9004) -> Rust MCP EDGAR (:8002) -> SEC APIs
   -> Semantic + Episodic memory (ChromaDB + SQLite)
   -> Granite synthesizes unified briefing
@@ -128,6 +129,7 @@ atlas-scheduler-demo
 atlas-alert-demo
 atlas-alert-watch-demo
 atlas-tracing-demo
+atlas-taiwan-demo
 atlas
 atlas-dashboard
 ```
@@ -322,6 +324,25 @@ atlas-dashboard
 12. Run logger writes JSON artifact; episodic memory stores the record
 ```
 
+## Taiwan Strait Demo (Phase 13)
+
+Full end-to-end scenario exercising alerts, synthesis, briefing, tracing, and seed data:
+
+```powershell
+atlas-taiwan-demo
+# or: python -m examples.taiwan_demo
+```
+
+Interview walkthrough: [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md)  
+Expected output shapes: [data/sample_scenarios/taiwan_demo_expected_output.md](data/sample_scenarios/taiwan_demo_expected_output.md)
+
+After seeding (Step 1 runs automatically in the demo), equivalent paths:
+
+```powershell
+atlas query "What's the exposure risk if Taiwan Strait tensions escalate? Consider semiconductor supply chains, market impact, and TSMC filing risk factors."
+atlas-dashboard   # Query page with the same question
+```
+
 ## Current Demo Scenario
 
 The synthesis demo runs the Taiwan Strait semiconductor exposure scenario:
@@ -350,8 +371,6 @@ See [docs/DEVLOG.md](docs/DEVLOG.md) for the full ADR text.
 
 Planned next:
 
-- Phase 12: Web dashboard (Streamlit trace viewer)
-- Phase 13: Full demo scenario
 - Phase 14: Polish and presentation
 
 ## Notes

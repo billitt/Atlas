@@ -728,3 +728,48 @@ python -m examples.synthesis_demo
 
 **Complete** when the dashboard loads all five pages and query/briefing/alerts integrate with the existing Phase 0–11 stack.
 
+---
+
+## Phase 13 — Taiwan Strait demo scenario
+
+**Goal:** Wire all Atlas paths into one compelling end-to-end demo: Taiwan Strait tensions spike → alert → multi-agent synthesis → briefing → trace.
+
+### Added
+
+| Path | Purpose |
+|------|---------|
+| `data/seed_data/taiwan_scenario.json` | Simulated GDELT-style conflict events (5-day escalation, HIGH risk aggregate) |
+| `data/seed_data/tsmc_filing_excerpt.txt` | Simulated TSMC 20-F risk factor excerpt |
+| `data/seed_data/trade_flow_data.json` | Simulated UN Comtrade semiconductor trade / chokepoint data |
+| `ingestion/seed_loader.py` | `load_taiwan_scenario()`, `seed_alert_context()` — ingest seed files into ChromaDB |
+| `examples/taiwan_demo.py` | Full 6-step demo: seed → alert → synthesis → briefing → trace → summary |
+| `data/sample_scenarios/taiwan_demo_expected_output.md` | Expected alert, briefing, and trace shapes for interviews |
+| `docs/DEMO_SCRIPT.md` | Step-by-step interview walkthrough with fallbacks |
+
+### Modified
+
+| Path | Change |
+|------|--------|
+| `agents/geopolitical/agent.py` | Optional `semantic_memory`; `_semantic_context()` in `execute()` for seed GDELT grounding |
+| `agents/supply_chain/agent.py` | Same pattern for trade-flow / chokepoint seed data |
+| `pyproject.toml` | Adds `ingestion` package and `atlas-taiwan-demo` script |
+| `README.md` | Phase 13 status and demo launch instructions |
+| `CLAUDE.md` | Phase 13 file map, dependencies, metrics |
+
+### Implementation notes
+
+- Geopolitical and Supply Chain agents still work without seed data; they produce richer output when Taiwan scenario is ingested.
+- Alert step uses `seed_alert_context()` + `_evaluate_condition()` with deterministic HIGH fallback when aggregate `risk_level == HIGH`.
+- Demo reuses `examples/_demo_infra.py` for MCP check and A2A auto-start; tracing via `init_tracing(export_to="file")`.
+- CLI (`atlas query`) and dashboard Query page hit the same synthesis pipeline after seeding.
+- `ingestion/` is no longer fully stubbed — `seed_loader.py` is the first ingestion module.
+
+### Verification
+
+- `python -m ruff check ingestion/ examples/taiwan_demo.py agents/geopolitical/ agents/supply_chain/` completed successfully.
+- `atlas-taiwan-demo` import smoke test completed successfully.
+
+### Phase 13 outcome
+
+**Complete** when `atlas-taiwan-demo` runs all six steps, seed data grounds Geopolitical and Supply Chain agents, and CLI/dashboard produce equivalent synthesis output for the Taiwan query.
+

@@ -1,0 +1,9 @@
+RISK FACTORS — GEOPOLITICAL AND CROSS-STRAIT EXPOSURE (Simulated TSMC 20-F Excerpt)
+
+Our operations depend heavily on fabs located in Taiwan, including advanced-node facilities in Hsinchu and Tainan Science Parks. Escalation of cross-strait tensions, military activity in the Taiwan Strait, or disruptions to regional logistics could materially affect our ability to manufacture, package, and ship semiconductors.
+
+We monitor PLA naval activity, export control developments, and customer requests for geographic diversification of supply. While we are expanding capacity in Arizona, Japan, and Germany, a significant majority of leading-edge wafer output remains in Taiwan for the foreseeable planning horizon.
+
+Forward-looking statements in this excerpt note that diversification timelines may accelerate if geopolitical risk premiums persist. Customers in the EU and United States remain dependent on TSMC for sub-7nm production for AI accelerators, mobile SoCs, and automotive ADAS chips.
+
+We cannot assure investors that contingency shipping routes, inventory buffers, or alternative packaging partners would fully offset a prolonged Taiwan Strait disruption. Any sustained blockade or kinetic incident near our fabs could cause severe revenue impact and global semiconductor shortages.

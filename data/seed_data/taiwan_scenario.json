@@ -1,0 +1,53 @@
+{
+  "scenario_name": "taiwan_strait_escalation",
+  "description": "Simulated GDELT-style conflict events for Taiwan Strait semiconductor escalation demo",
+  "entities": ["Taiwan", "China", "TSMC", "ASML", "semiconductor", "South China Sea"],
+  "events": [
+    {
+      "date": "2026-05-23",
+      "region": "Taiwan Strait",
+      "gldelt_tone": -6.2,
+      "goldstein_scale": 7.5,
+      "entities": ["China", "Taiwan", "PLA Navy"],
+      "summary": "Increased PLA naval patrols reported near median line; Taiwan defense ministry raises readiness posture."
+    },
+    {
+      "date": "2026-05-24",
+      "region": "South China Sea",
+      "gldelt_tone": -7.1,
+      "goldstein_scale": 8.0,
+      "entities": ["China", "United States", "Philippines"],
+      "summary": "US carrier strike group transits Taiwan Strait; Beijing issues formal protest citing sovereignty violation."
+    },
+    {
+      "date": "2026-05-25",
+      "region": "Taiwan Strait",
+      "gldelt_tone": -8.4,
+      "goldstein_scale": 8.5,
+      "entities": ["Taiwan", "TSMC", "semiconductor"],
+      "summary": "Taiwan export control office briefs chipmakers on contingency logistics; TSMC confirms review of overseas fab expansion timeline."
+    },
+    {
+      "date": "2026-05-26",
+      "region": "Taipei",
+      "gldelt_tone": -7.8,
+      "goldstein_scale": 7.8,
+      "entities": ["Taiwan", "China", "ASML"],
+      "summary": "EU and US diplomats coordinate semiconductor supply security statement; markets price elevated cross-strait risk premium."
+    },
+    {
+      "date": "2026-05-27",
+      "region": "Taiwan Strait",
+      "gldelt_tone": -9.1,
+      "goldstein_scale": 9.0,
+      "entities": ["Taiwan", "China", "TSMC", "semiconductor", "South China Sea"],
+      "summary": "Simulated escalation peak: multiple GDELT conflict events flag Taiwan Strait tension score at 5-day high; advanced chip supply risk flagged HIGH for EU/US auto and AI sectors."
+    }
+  ],
+  "aggregate_metrics": {
+    "five_day_avg_tone": -7.72,
+    "peak_tone": -9.1,
+    "risk_level": "HIGH",
+    "affected_sectors": ["semiconductors", "automotive", "AI infrastructure", "defense electronics"]
+  }
+}

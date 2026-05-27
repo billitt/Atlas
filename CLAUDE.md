@@ -2,7 +2,7 @@
 
 This file is maintained by Cursor after each phase. Claude reads it to understand the codebase without re-reading every file. **Cursor: update this file at the end of every phase.**
 
-Last updated: Phase 12 (2026-05-27)
+Last updated: Phase 13 (2026-05-27)
 
 ---
 
@@ -11,10 +11,10 @@ Last updated: Phase 12 (2026-05-27)
 | Metric | Value |
 |--------|-------|
 | Commits | 19 |
-| Total files | 134 |
-| Rust LOC | 1,092 |
-| Python LOC | 6,558 |
-| Phases complete | 0, 1A, 1B, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 |
+| Total files | 142 |
+| Rust LOC | 959 |
+| Python LOC | 6,200 |
+| Phases complete | 0, 1A, 1B, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13 |
 
 ---
 
@@ -34,9 +34,11 @@ User (Typer CLI `atlas` / Streamlit dashboard `ui/streamlit_app.py`)
           -> Granite via Ollama (services/llm.py)
           -> Episodic Memory execution log (memory/episodic.py, SQLite)
         -> Geopolitical Agent :9002 (agents/geopolitical/agent.py)
-          -> Granite model-knowledge analysis, explicit live-data limitation
+          -> Semantic Memory seed GDELT context when ingested (memory/semantic.py)
+          -> Granite analysis with explicit live-data limitation disclosure
         -> Supply Chain Agent :9003 (agents/supply_chain/agent.py)
-          -> Granite model-knowledge analysis, explicit live-data limitation
+          -> Semantic Memory seed trade-flow / chokepoint context when ingested
+          -> Granite analysis with explicit live-data limitation disclosure
         -> Research & Filing Agent :9004 (agents/research/agent.py)
           -> Semantic Memory ingest for filing text (memory/semantic.py)
           -> MCP client (protocols/mcp/client.py)
@@ -71,8 +73,20 @@ Real-time alert flow:
 
 Memory tiers:
   Tier 1 Semantic: ChromaDB persistent vectors in data/chroma
+    -> Taiwan demo seed via ingestion/seed_loader.py (GDELT, filing excerpt, trade flow)
   Tier 2 Episodic: SQLite records in data/sqlite/atlas_episodic.db
   Tier 3 Working: in-context scratchpad (memory/working.py), used by demos/LangGraph state
+
+Taiwan Strait demo (Phase 13) — single scenario exercises all paths:
+  ingestion/seed_loader.load_taiwan_scenario()
+    -> semantic memory (ChromaDB)
+  examples/taiwan_demo.py
+    -> alert (seed_alert_context + _evaluate_condition)
+    -> LangGraph synthesis (4 A2A agents + Guardian)
+    -> BriefingEngine (single topic + delta)
+    -> OpenTelemetry trace tree
+  Equivalent: atlas query "..." | ui/pages/query.py (after seeding)
+  Interview script: docs/DEMO_SCRIPT.md
 ```
 
 ---
@@ -358,17 +372,21 @@ Memory tiers:
 
 **agents/geopolitical/agent.py**
 - `class GeopoliticalRiskAgent(BaseAgent)`
-- Uses Granite model knowledge only until geopolitical MCP exists.
+- Optional `semantic_memory: SemanticMemory | None` in `__init__`; defaults to `SemanticMemory()`.
 - `plan(query: str) -> dict[str, Any]`
-- `execute(query: str, plan: dict[str, Any]) -> AgentResult`
+- `execute(query: str, plan: dict[str, Any]) -> AgentResult` — queries `_semantic_context()` before Granite analysis
 - `reflect(query: str, draft: AgentResult) -> tuple[bool, str, Confidence]`
+- `_semantic_context(query: str) -> tuple[str, list[dict[str, Any]]]` — filters matches with `category=geopolitical` or `source=seed_gdelt`
+- Uses Granite model knowledge when no seed context; grounds in semantic memory when Taiwan scenario ingested.
 
-**agents/supply_chain/agent.py** (128 lines)
+**agents/supply_chain/agent.py** (~175 lines)
 - `class SupplyChainAgent(BaseAgent)`
-- Uses Granite model knowledge only until supply-chain MCP exists.
+- Optional `semantic_memory: SemanticMemory | None` in `__init__`; defaults to `SemanticMemory()`.
 - `plan(query: str) -> dict[str, Any]`
-- `execute(query: str, plan: dict[str, Any]) -> AgentResult`
+- `execute(query: str, plan: dict[str, Any]) -> AgentResult` — queries `_semantic_context()` before Granite analysis
 - `reflect(query: str, draft: AgentResult) -> tuple[bool, str, Confidence]`
+- `_semantic_context(query: str) -> tuple[str, list[dict[str, Any]]]` — filters matches with `category=supply_chain` or `source=seed_comtrade`
+- Uses Granite model knowledge when no seed context; grounds in trade-flow seed when ingested.
 
 **agents/research/agent.py** (214 lines)
 - `class ResearchFilingAgent(BaseAgent)`
@@ -621,6 +639,42 @@ Memory tiers:
 - Calls `init_tracing(export_to="file")`, runs full synthesis pipeline via `run_synthesis_graph()`, saves run log with `trace_id`, prints `format_trace_tree()` and trace file path.
 - Dependencies: `examples._demo_infra`, `observability.tracing`, `observability.trace_reader`, `orchestration.graph.run_synthesis_graph`.
 
+**examples/taiwan_demo.py**
+- Phase 13 Taiwan Strait end-to-end demo scenario.
+- Constants: `DEMO_QUERY`, `BRIEFING_TOPIC = "Taiwan Strait semiconductor risk"`.
+- `async def run() -> None` — six steps: seed → alert → synthesis → briefing → trace → summary box.
+- `async def _run_alert_demo() -> JsonDict | None` — rule `taiwan_strait_tension`, `seed_alert_context()` + `_evaluate_condition()` with HIGH fallback.
+- `def main() -> None`
+- Dependencies: `ingestion.seed_loader`, `examples._demo_infra`, `orchestration.graph`, `services.briefing`, `services.alerts`, `observability.tracing`, `observability.trace_reader`, `memory.semantic`, `memory.episodic`.
+
+### Ingestion / Seed Data
+
+**data/seed_data/taiwan_scenario.json**
+- Simulated GDELT-style conflict events over 5 days for Taiwan Strait escalation.
+- Keys: `scenario_name`, `entities`, `events[]` (`date`, `region`, `gldelt_tone`, `goldstein_scale`, `summary`), `aggregate_metrics` (`risk_level: HIGH`, `peak_tone: -9.1`).
+
+**data/seed_data/tsmc_filing_excerpt.txt**
+- Simulated TSMC 20-F risk factor excerpt (geopolitical exposure, cross-strait tensions, diversification).
+
+**data/seed_data/trade_flow_data.json**
+- Simulated UN Comtrade semiconductor trade flow, `commodities[]`, `chokepoints[]` (TSMC Hsinchu 90% advanced chips).
+
+**data/sample_scenarios/taiwan_demo_expected_output.md**
+- Expected alert, briefing structure, trace tree shape, and timing for interviews.
+
+**ingestion/__init__.py**
+- Exports `load_taiwan_scenario`, `seed_alert_context`.
+
+**ingestion/seed_loader.py**
+- Constants: `SEED_DIR = Path("data/seed_data")`, `SCENARIO_NAME = "taiwan_strait_escalation"`.
+- `def _read_text(path: Path) -> str`
+- `def _scenario_documents() -> tuple[list[str], list[JsonDict], list[str]]`
+- `def load_taiwan_scenario(*, semantic_memory: SemanticMemory | None = None, persist_dir: str = "data/chroma") -> int` — ingests seed files; metadata `source`, `date`, `category`, `scenario_name`; returns document count.
+- `def seed_alert_context() -> JsonDict` — fresh-data-shaped payload for demo alert evaluation.
+
+**docs/DEMO_SCRIPT.md**
+- Step-by-step interview walkthrough: prerequisites, scripted demo, CLI/dashboard paths, Q&A, fallbacks.
+
 Other demos:
 - `scripts/verify_ollama.py`
 - `examples/langgraph_hello.py`
@@ -631,10 +685,10 @@ Other demos:
 ### Config
 
 **pyproject.toml**
-- Packages: `services`, `examples`, `scripts`, `protocols`, `agents`, `orchestration`, `memory`, `observability`.
+- Packages: `services`, `examples`, `scripts`, `protocols`, `agents`, `orchestration`, `memory`, `observability`, `cli`, `ui`, `ingestion`.
 - Dependencies include: `langgraph`, `langchain-ollama`, `beeai-framework`, `a2a-sdk`, `mcp`, `httpx`, `chromadb`, `sqlmodel`, `python-dotenv`.
 - `beeai-framework` is retained because `examples/beeai_hello.py` imports it; Atlas production agents use the custom `BaseAgent` pattern.
-- Scripts include: `atlas-memory-demo`, `atlas-synthesis-demo`, `atlas-edgar-demo`, `atlas-guardian-demo`, `atlas-briefing-demo`, `atlas-scheduler-demo`, `atlas-alert-demo`, `atlas-alert-watch-demo`, `atlas-tracing-demo`, `atlas`, `atlas-dashboard`.
+- Scripts include: `atlas-memory-demo`, `atlas-synthesis-demo`, `atlas-edgar-demo`, `atlas-guardian-demo`, `atlas-briefing-demo`, `atlas-scheduler-demo`, `atlas-alert-demo`, `atlas-alert-watch-demo`, `atlas-tracing-demo`, `atlas-taiwan-demo`, `atlas`, `atlas-dashboard`.
 
 **.env.example**
 - `OLLAMA_BASE_URL=http://localhost:11434`
@@ -788,6 +842,17 @@ Other demos:
 - Added Phase 12 entry in `docs/DEVLOG.md`.
 - Verification: Ruff check and UI import smoke test completed successfully.
 
+### Phase 13 — Taiwan Strait Demo Scenario
+- Created `data/seed_data/taiwan_scenario.json`, `tsmc_filing_excerpt.txt`, `trade_flow_data.json` — simulated GDELT, filing, and trade-flow seed data.
+- Created `ingestion/seed_loader.py` with `load_taiwan_scenario()` and `seed_alert_context()`.
+- Created `examples/taiwan_demo.py` — six-step end-to-end demo (seed, alert, synthesis, briefing, trace, summary).
+- Created `data/sample_scenarios/taiwan_demo_expected_output.md` and `docs/DEMO_SCRIPT.md`.
+- Modified `agents/geopolitical/agent.py` — optional semantic memory; `_semantic_context()` in `execute()`.
+- Modified `agents/supply_chain/agent.py` — same pattern for trade-flow seed data.
+- Modified `pyproject.toml` — adds `ingestion` package and `atlas-taiwan-demo` script.
+- Modified `README.md` and `docs/DEVLOG.md` — Phase 13 status and demo instructions.
+- Verification: Ruff check and import smoke test completed successfully.
+
 ---
 
 ## Dependencies Between Files
@@ -882,6 +947,26 @@ ui/streamlit_app.py
   -> ui/pages/alerts.py -> services/alerts.py, services/alert_defaults.py
   -> ui/pages/agent_status.py -> ui/runtime.py
   -> ui/pages/trace_viewer.py -> observability/trace_reader.py, ui/runtime.py
+
+ingestion/seed_loader.py
+  -> memory/semantic.py -> services/embeddings.py -> Ollama /api/embed
+  -> data/seed_data/taiwan_scenario.json
+  -> data/seed_data/tsmc_filing_excerpt.txt
+  -> data/seed_data/trade_flow_data.json
+
+examples/taiwan_demo.py
+  -> ingestion/seed_loader.py (load_taiwan_scenario, seed_alert_context)
+  -> examples/_demo_infra.py (MCP check, A2A servers)
+  -> services/alerts.py (_evaluate_condition for demo alert)
+  -> orchestration/graph.py (run_synthesis_graph)
+  -> agents/geopolitical/agent.py -> memory/semantic.py (seed GDELT)
+  -> agents/supply_chain/agent.py -> memory/semantic.py (seed trade flow)
+  -> agents/market/agent.py -> MCP :8001
+  -> agents/research/agent.py -> MCP :8002
+  -> services/briefing.py (BriefingEngine)
+  -> observability/tracing.py + observability/trace_reader.py
+  -> observability/run_logger.py + memory/episodic.py
+  -> docs/DEMO_SCRIPT.md (interview walkthrough)
 ```
 
 ---
@@ -903,9 +988,8 @@ ui/streamlit_app.py
 
 ## What's Stubbed / Not Yet Built
 
-- `ingestion/` — empty package only.
-- Geopolitical live data MCP server not built; agent uses model knowledge.
-- Supply-chain live data MCP server not built; agent uses model knowledge.
+- Geopolitical live GDELT MCP server not built; agent uses semantic memory seed + model knowledge.
+- Supply-chain live UN Comtrade MCP server not built; agent uses semantic memory seed + model knowledge.
 - Rust MCP servers built: `mcp-market-data`, `mcp-edgar`; future MCP servers remain unbuilt.
 
-`memory/` is no longer a stub as of Phase 5. `agents/research/` is no longer a stub as of Phase 6. `agents/guardian/` is no longer a stub as of Phase 7. `observability/` is no longer a stub as of Phase 10. `cli/` is no longer a stub as of Phase 11. `ui/` is no longer a stub as of Phase 12 (Streamlit dashboard).
+`memory/` is no longer a stub as of Phase 5. `agents/research/` is no longer a stub as of Phase 6. `agents/guardian/` is no longer a stub as of Phase 7. `observability/` is no longer a stub as of Phase 10. `cli/` is no longer a stub as of Phase 11. `ui/` is no longer a stub as of Phase 12 (Streamlit dashboard). `ingestion/` has `seed_loader.py` as of Phase 13 (Taiwan scenario); full live ingestion pipelines remain unbuilt.
