@@ -10,7 +10,7 @@ See [docs/DEVLOG.md](docs/DEVLOG.md) for implementation notes and ADRs. See [CLA
 
 ## Current Status
 
-Phases **0–9 are implemented and demo-verified**.
+Phases **0–11 are implemented and demo-verified**.
 
 | Phase | Status | What Works |
 |-------|--------|------------|
@@ -25,11 +25,13 @@ Phases **0–9 are implemented and demo-verified**.
 | 7 | Complete | Guardian Agent validates grounding and confidence in the synthesis graph |
 | 8 | Complete | Scheduled briefings via `BriefingEngine` and APScheduler |
 | 9 | Complete | Real-time alert monitoring via `AlertEngine` and `AlertWatcher` |
+| 10 | Complete | OpenTelemetry tracing across graph, agents, MCP, A2A, briefings, and alerts |
+| 11 | Complete | Typer CLI (`atlas`) for query, briefing, alerts, status, traces, and history |
 
 ## Architecture Snapshot
 
 ```text
-User query / watchlist topic / alert rule
+User (Typer CLI: atlas query / briefing / alerts / status / traces / history)
   -> LangGraph Synthesis workflow (or BriefingEngine / AlertEngine)
   -> Synthesis Agent creates execution plan with Granite
   -> A2A delegates tasks to specialist agents
@@ -124,7 +126,40 @@ atlas-briefing-demo
 atlas-scheduler-demo
 atlas-alert-demo
 atlas-alert-watch-demo
+atlas-tracing-demo
+atlas
 ```
+
+## CLI Usage
+
+After `pip install -e ".[dev]"`, the `atlas` command is available:
+
+```powershell
+# System health
+atlas status
+
+# Natural-language query (Ollama + MCP required; auto-starts A2A agents)
+atlas query "What's the TSMC risk exposure?"
+
+# Scheduled-style briefings
+atlas briefing --type daily
+atlas briefing --type weekly
+atlas briefing --topics "semiconductors,trade tensions"
+
+# Alerts
+atlas alerts rules
+atlas alerts check
+atlas alerts watch --interval 300
+
+# History and traces
+atlas history --limit 10
+atlas traces list
+atlas traces show <trace_id>
+```
+
+**Prerequisites for query/briefing:** Ollama running, `cargo run -p mcp-market-data` and `cargo run -p mcp-edgar`. The CLI auto-starts A2A agent servers in the background.
+
+Optional tracing: `$env:OTEL_EXPORT_TO = "file"` before `atlas query ...` exports spans to `data/traces/`.
 
 ## Phase-by-Phase Implementation
 
@@ -224,6 +259,19 @@ python -m examples.alert_demo             # one-shot rule check
 python -m examples.alert_watch_demo       # 60s watch loop for 3 min
 ```
 
+### Phase 10 — OpenTelemetry Tracing
+
+Full execution traces for synthesis, briefings, and alerts. File export to `data/traces/`.
+
+```powershell
+python -m examples.tracing_demo
+# or: atlas-tracing-demo
+```
+
+### Phase 11 — Typer CLI
+
+The CLI replaces example scripts for day-to-day use. See [CLI Usage](#cli-usage) above.
+
 ## Full Chain of Command
 
 ```text
@@ -269,9 +317,7 @@ See [docs/DEVLOG.md](docs/DEVLOG.md) for the full ADR text.
 
 Planned next:
 
-- Phase 10: Observability (OpenTelemetry spans)
-- Phase 11: CLI interface
-- Phase 12: Web dashboard
+- Phase 12: Web dashboard (Streamlit trace viewer)
 - Phase 13: Full demo scenario
 - Phase 14: Polish and presentation
 
@@ -280,4 +326,4 @@ Planned next:
 - Geopolitical and Supply Chain agents use Granite model knowledge only; live MCP data sources for those domains are not yet built.
 - Rust MCP servers must be running before demos that require live market or filing data.
 - Ollama must be running before any Granite-backed agent call.
-- Multi-agent demos share startup helpers in `examples/_demo_infra.py`.
+- Multi-agent demos and the CLI share startup helpers in `examples/_demo_infra.py` (CLI auto-starts A2A servers for query/briefing).

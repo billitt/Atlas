@@ -39,6 +39,7 @@ dev = [
 ]
 
 [project.scripts]
+atlas = "cli.main:app"
 atlas-verify-ollama = "scripts.verify_ollama:main"
 atlas-langgraph-hello = "examples.langgraph_hello:main"
 atlas-beeai-hello = "examples.beeai_hello:main"
@@ -59,7 +60,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["services", "examples", "scripts", "protocols", "agents", "orchestration", "memory", "observability"]
+packages = ["services", "examples", "scripts", "protocols", "agents", "orchestration", "memory", "observability", "cli"]
 
 [tool.ruff]
 line-length = 100

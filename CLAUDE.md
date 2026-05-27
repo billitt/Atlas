@@ -2,7 +2,7 @@
 
 This file is maintained by Cursor after each phase. Claude reads it to understand the codebase without re-reading every file. **Cursor: update this file at the end of every phase.**
 
-Last updated: Phase 10 (2026-05-27)
+Last updated: Phase 11 (2026-05-27)
 
 ---
 
@@ -11,17 +11,17 @@ Last updated: Phase 10 (2026-05-27)
 | Metric | Value |
 |--------|-------|
 | Commits | 19 |
-| Total files | 112 |
+| Total files | 114 |
 | Rust LOC | 1,092 |
-| Python LOC | 4,944 |
-| Phases complete | 0, 1A, 1B, 2, 3, 4, 5, 6, 7, 8, 9, 10 |
+| Python LOC | 5,601 |
+| Phases complete | 0, 1A, 1B, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11 |
 
 ---
 
 ## Architecture Summary
 
 ```text
-User query
+User (Typer CLI: atlas query / briefing / alerts / status / traces / history)
   -> LangGraph Synthesis workflow (orchestration/graph.py)
     -> Synthesis Agent (agents/synthesis/agent.py)
       -> Planner (agents/synthesis/planner.py) creates DAG plan from Agent Cards
@@ -496,6 +496,32 @@ Memory tiers:
 - Writes `runs/YYYYMMDD_HHMMSS.json`.
 - Persists all non-null keys from `run_data`; auto-adds `trace_id` from active OTel context when missing.
 
+### CLI
+
+**cli/main.py**
+- `app: typer.Typer` — root CLI (`atlas = "cli.main:app"`)
+- `agent_runtime()` — context manager: MCP check, background A2A servers, agent card load
+- `_collect_status() -> dict[str, Any]` — Ollama/MCP/memory/last activity health
+- `_build_alert_engine() -> AlertEngine`
+- `@app.command() query(text: str)` — full synthesis pipeline + run log + episodic memory
+- `@app.command() briefing(briefing_type: str = "daily", topics: str | None)` — `BriefingEngine.generate_briefing()`
+- `@app.command() status()` — system health dashboard
+- `@app.command() history(limit: int = 10)` — recent `BriefingRecord` rows
+- `@alerts_app.command() check()` — `AlertEngine.check_all_rules()` once
+- `@alerts_app.command() watch(interval: int = 300)` — `AlertWatcher` loop until Ctrl+C
+- `@alerts_app.command() rules()` — list default alert rules
+- `@traces_app.command() list()` — `list_traces()` with query metadata
+- `@traces_app.command() show(trace_id: str)` — `format_trace_tree()` for one trace
+
+**cli/formatters.py**
+- `format_query_result(briefing: dict, *, trace_id: str | None = None) -> str`
+- `format_briefing_output(briefing: dict, *, trace_id: str | None = None) -> str`
+- `format_alert(alert: dict) -> str`
+- `format_status(status: dict) -> str`
+- `format_trace_tree(tree: str) -> str`
+- `format_history_row(record: dict) -> str`
+- Uses `typer.style` ANSI colors: GREEN=HIGH/pass, YELLOW=MEDIUM, RED=LOW/HIGH severity
+
 ### Examples / Scripts
 
 **examples/_demo_infra.py**
@@ -710,6 +736,14 @@ Other demos:
 - Added ADR-010 in `docs/DEVLOG.md` for trace storage and retention policy.
 - Verification: Ruff check and tracing module smoke test completed successfully.
 
+### Phase 11 — Typer CLI Interface
+- Created `cli/main.py` with Typer commands: `query`, `briefing`, `status`, `history`, `alerts check|watch|rules`, `traces list|show`.
+- Created `cli/formatters.py` with ANSI-colored terminal formatters.
+- Modified `pyproject.toml` — adds `atlas = "cli.main:app"` and `cli` wheel package.
+- Modified `README.md` — CLI usage section and Phase 11 status.
+- Added Phase 11 entry in `docs/DEVLOG.md`.
+- Verification: Ruff check, `atlas --help`, and `atlas status` smoke test completed successfully.
+
 ---
 
 ## Dependencies Between Files
@@ -781,10 +815,20 @@ examples/tracing_demo.py
   -> observability/tracing.py (init_tracing export_to=file)
   -> examples/_demo_infra.py
   -> orchestration/graph.py (run_synthesis_graph)
-    -> observability/tracing.py (graph + agent + llm + mcp + a2a spans)
   -> observability/trace_reader.py (format_trace_tree)
   -> observability/run_logger.py (trace_id linkage)
   -> memory/episodic.py
+
+cli/main.py
+  -> cli/formatters.py
+  -> examples/_demo_infra.py (query, briefing: auto-start A2A)
+  -> orchestration/graph.py (query: run_synthesis_graph)
+  -> services/briefing.py (briefing command)
+  -> services/alerts.py + services/alert_defaults.py + services/alert_watch.py (alerts commands)
+  -> memory/episodic.py (history, status)
+  -> memory/semantic.py (status)
+  -> observability/trace_reader.py (traces commands)
+  -> observability/run_logger.py + observability/tracing.py (query)
 ```
 
 ---
@@ -808,10 +852,9 @@ examples/tracing_demo.py
 
 - `ingestion/` — empty package only.
 - `ui/` — empty package only.
-- `cli/` — empty package only.
 - Geopolitical live data MCP server not built; agent uses model knowledge.
 - Supply-chain live data MCP server not built; agent uses model knowledge.
 - Rust MCP servers built: `mcp-market-data`, `mcp-edgar`; future MCP servers remain unbuilt.
-- `ui/` and `cli/` remain empty; Phase 12 Streamlit trace viewer will consume `trace_reader.py`.
+- `ui/` and `cli/` — `cli/` is no longer a stub as of Phase 11; `ui/` remains empty for Phase 12 Streamlit viewer.
 
 `memory/` is no longer a stub as of Phase 5. `agents/research/` is no longer a stub as of Phase 6. `agents/guardian/` is no longer a stub as of Phase 7. `observability/` is no longer a stub as of Phase 10 (OTel tracing + run logging + trace reader).

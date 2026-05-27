@@ -648,3 +648,41 @@ python -m examples.synthesis_demo
 - Production deployments can switch `OTEL_EXPORT_TO=jaeger` without changing instrumentation.
 - Phase 12 trace viewer can reuse `trace_reader.py` without parsing OTel protobuf.
 
+---
+
+## Phase 11 — Typer CLI interface
+
+**Goal:** Replace example scripts with a unified `atlas` command for queries, briefings, alerts, status, traces, and history.
+
+### Added
+
+| Path | Purpose |
+|------|---------|
+| `cli/main.py` | Typer app with `query`, `briefing`, `status`, `history`, `alerts`, and `traces` command groups |
+| `cli/formatters.py` | ANSI-colored terminal formatters for query results, alerts, status, traces, and history |
+
+### Modified
+
+| Path | Change |
+|------|--------|
+| `pyproject.toml` | Adds `atlas = "cli.main:app"` entry point and `cli` package |
+| `README.md` | Adds CLI usage section and Phase 11 status |
+
+### Implementation notes
+
+- `query` and `briefing` reuse `examples._demo_infra` to auto-start A2A servers and verify MCP health.
+- `alerts check` / `alerts watch` reuse `AlertEngine`, `default_alert_rules()`, and `AlertWatcher`.
+- `status` checks Ollama, MCP `/health`, semantic/episodic counts, and last briefing/alert timestamps.
+- `traces list` / `traces show` wrap `observability.trace_reader`.
+- `history` reads recent `BriefingRecord` rows from episodic memory.
+- No new agent or pipeline logic — CLI is a thin orchestration layer.
+
+### Verification
+
+- `python -m ruff check cli/` completed successfully.
+- `atlas --help` and `atlas status` smoke test completed successfully.
+
+### Phase 11 outcome
+
+**Complete** when `atlas query`, `atlas briefing`, `atlas alerts check`, `atlas status`, `atlas traces list`, and `atlas history` run against the existing Phase 0–10 stack.
+
