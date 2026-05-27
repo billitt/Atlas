@@ -7,7 +7,12 @@ import sys
 
 from agents.guardian.agent import GuardianAgent
 from agents.synthesis.agent import SynthesisAgent
-from examples.briefing_demo import start_agent_servers, wait_for_agent_cards
+from examples._demo_infra import (
+    DEFAULT_AGENT_CARD_URLS,
+    start_agent_servers,
+    start_mcp_check,
+    wait_for_agent_cards,
+)
 from memory.episodic import EpisodicMemory
 from protocols.a2a.discovery import load_cards
 from services.briefing import BriefingEngine
@@ -23,17 +28,11 @@ async def run() -> None:
     print("Prerequisites: Ollama running, MCP market :8001, MCP EDGAR :8002")
     print("-" * 80)
 
+    await start_mcp_check()
     servers = start_agent_servers()
     scheduler: AtlasScheduler | None = None
     try:
-        await wait_for_agent_cards(
-            [
-                "http://localhost:9001",
-                "http://localhost:9002",
-                "http://localhost:9003",
-                "http://localhost:9004",
-            ]
-        )
+        await wait_for_agent_cards(DEFAULT_AGENT_CARD_URLS)
         registry = load_cards("agents")
         agent_cards = [
             card

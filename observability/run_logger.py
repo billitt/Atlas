@@ -19,27 +19,7 @@ def save_run(run_data: dict[str, Any]) -> Path:
 
     payload = {
         "timestamp": timestamp,
-        "query": run_data.get("query"),
-        "rule_id": run_data.get("rule_id"),
-        "rule_name": run_data.get("rule_name"),
-        "severity": run_data.get("severity"),
-        "summary": run_data.get("summary"),
-        "evidence": run_data.get("evidence"),
-        "alert_result": run_data.get("alert_result"),
-        "briefing_type": run_data.get("briefing_type"),
-        "topics": run_data.get("topics", []),
-        "sections_count": run_data.get("sections_count"),
-        "overall_risk_level": run_data.get("overall_risk_level"),
-        "execution_plan": run_data.get("execution_plan"),
-        "agent_results": run_data.get("agent_results"),
-        "sources": run_data.get("sources"),
-        "confidence": run_data.get("confidence"),
-        "final_briefing": run_data.get("final_briefing"),
-        "guardian_verdict": run_data.get("guardian_verdict", {}),
-        "delta_from_last": run_data.get("delta_from_last"),
-        "per_topic": run_data.get("per_topic", []),
-        "duration_seconds": run_data.get("duration_seconds"),
-        "memory_stats": run_data.get("memory_stats", {}),
+        **{k: v for k, v in run_data.items() if v is not None},
     }
 
     path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")

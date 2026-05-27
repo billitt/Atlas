@@ -2,7 +2,7 @@
 
 This file is maintained by Cursor after each phase. Claude reads it to understand the codebase without re-reading every file. **Cursor: update this file at the end of every phase.**
 
-Last updated: Phase 9 (2026-05-18)
+Last updated: Phase 9.1 (2026-05-27)
 
 ---
 
@@ -465,20 +465,28 @@ Memory tiers:
 
 ### Observability
 
-**observability/run_logger.py** (40 lines)
+**observability/run_logger.py**
 - `save_run(run_data: dict[str, Any]) -> Path`
 - Writes `runs/YYYYMMDD_HHMMSS.json`.
-- Payload keys: `timestamp`, `query`, `rule_id`, `rule_name`, `severity`, `summary`, `evidence`, `alert_result`, `briefing_type`, `topics`, `sections_count`, `overall_risk_level`, `execution_plan`, `agent_results`, `sources`, `confidence`, `final_briefing`, `guardian_verdict`, `delta_from_last`, `per_topic`, `duration_seconds`, `memory_stats`.
+- Persists all non-null keys from `run_data` plus a normalized `timestamp`; no hardcoded schema per run type.
 
 ### Examples / Scripts
+
+**examples/_demo_infra.py**
+- Internal shared helpers for multi-agent demos (not a standalone demo entry point).
+- `async def start_mcp_check(urls, *, timeout_seconds) -> None` — polls MCP `GET /health` before agent startup.
+- `async def wait_for_agent_cards(urls, *, timeout_seconds) -> None` — polls A2A agent card endpoints.
+- `def start_agent_servers() -> list[A2AServer]` — starts Market, Geopolitical, Supply Chain, and Research A2A servers on `:9001`–`:9004`.
+- Constants: `DEFAULT_MCP_URLS`, `DEFAULT_AGENT_CARD_URLS`.
+- Called by: `examples/synthesis_demo.py`, `examples/briefing_demo.py`, `examples/scheduler_demo.py`.
 
 **examples/memory_demo.py** (71 lines)
 - `main() -> None`
 - Proves semantic, episodic, and working memory independently.
 
-**examples/synthesis_demo.py** (178 lines)
-- Starts A2A servers on `9001`, `9002`, `9003`, `9004`.
-- Runs LangGraph synthesis flow.
+**examples/synthesis_demo.py**
+- Imports `start_mcp_check`, `start_agent_servers`, `wait_for_agent_cards` from `examples._demo_infra`.
+- Runs LangGraph synthesis flow with Guardian validation.
 - Saves JSON run artifact and SQLite briefing record.
 
 **examples/edgar_demo.py** (43 lines)
@@ -494,20 +502,16 @@ Memory tiers:
 - Builds a fake briefing with one grounded claim and one fabricated claim, then calls `GuardianAgent.validate()`.
 - Dependencies: `agents.guardian.agent.GuardianAgent`, `json`, `sys`.
 
-**examples/briefing_demo.py** (105 lines)
+**examples/briefing_demo.py**
 - Immediate Phase 8 briefing generation demo.
-- `async def wait_for_agent_cards(urls: list[str], *, timeout_seconds: float = 10.0) -> None`
-- `def start_agent_servers() -> list[A2AServer]`
-- `async def run() -> None`
-- `def main() -> None`
-- Starts Market, Geopolitical, Supply Chain, and Research A2A servers; builds `BriefingEngine`; runs default watchlist; prints `format_daily_briefing()` and `format_summary_line()`.
-- Dependencies: specialist agents, `SynthesisAgent`, `GuardianAgent`, `EpisodicMemory`, `A2AServer`, `McpClient`, `BriefingEngine`, briefing templates.
+- Imports startup helpers from `examples._demo_infra`.
+- Builds `BriefingEngine`; runs default watchlist; prints `format_daily_briefing()` and `format_summary_line()`.
+- Dependencies: `SynthesisAgent`, `GuardianAgent`, `EpisodicMemory`, `BriefingEngine`, briefing templates.
 
-**examples/scheduler_demo.py** (63 lines)
+**examples/scheduler_demo.py**
 - Autonomous Phase 8 scheduler demo.
-- `async def run() -> None`
-- `def main() -> None`
-- Reuses `start_agent_servers()` and `wait_for_agent_cards()` from `examples.briefing_demo`; schedules `AtlasScheduler.schedule_custom("*/1 * * * *", ["semiconductor supply chain"])`; runs for 185 seconds; shuts down gracefully.
+- Imports startup helpers from `examples._demo_infra`.
+- Schedules `AtlasScheduler.schedule_custom("*/1 * * * *", ["semiconductor supply chain"])`; runs for 185 seconds; shuts down gracefully.
 - Dependencies: `AtlasScheduler`, `BriefingEngine`, `SynthesisAgent`, `GuardianAgent`, `EpisodicMemory`, A2A discovery.
 
 **examples/alert_demo.py** (41 lines)
@@ -647,27 +651,24 @@ Other demos:
 - Modified `pyproject.toml` to add `atlas-alert-demo` and `atlas-alert-watch-demo`.
 - Verification: Ruff check and Phase 9 import smoke test completed successfully.
 
+### Phase 9.1 — Cleanup refactor
+- Created `examples/_demo_infra.py` with shared `start_agent_servers()`, `wait_for_agent_cards()`, and `start_mcp_check()` helpers.
+- Modified `examples/synthesis_demo.py`, `examples/briefing_demo.py`, and `examples/scheduler_demo.py` to import from `_demo_infra` instead of duplicating startup boilerplate.
+- Simplified `observability/run_logger.py` to write all non-null `run_data` fields without a hardcoded schema.
+- Updated `README.md` to reflect Phases 0–9 as complete.
+
 ---
 
 ## Dependencies Between Files
 
 ```text
 examples/synthesis_demo.py
-  -> protocols/a2a/server.py
-  -> agents/market/agent.py
-    -> memory/semantic.py
-      -> services/embeddings.py -> Ollama /api/embed
-    -> memory/episodic.py
-    -> protocols/mcp/client.py -> Rust MCP server :8001
-    -> services/llm.py -> Ollama / Granite
-  -> agents/geopolitical/agent.py -> services/llm.py
-  -> agents/supply_chain/agent.py -> services/llm.py
-  -> agents/research/agent.py
-    -> agents/research/tools.py
-      -> protocols/mcp/client.py -> Rust MCP server :8002
-        -> SEC EDGAR APIs
-    -> memory/semantic.py -> services/embeddings.py -> Ollama /api/embed
-    -> services/llm.py -> Ollama / Granite
+  -> examples/_demo_infra.py
+    -> protocols/a2a/server.py
+    -> agents/market/agent.py -> protocols/mcp/client.py -> Rust MCP server :8001
+    -> agents/geopolitical/agent.py -> services/llm.py
+    -> agents/supply_chain/agent.py -> services/llm.py
+    -> agents/research/agent.py -> protocols/mcp/client.py -> Rust MCP server :8002
   -> agents/synthesis/agent.py
     -> agents/synthesis/planner.py -> services/llm.py
     -> protocols/a2a/client.py
@@ -675,7 +676,8 @@ examples/synthesis_demo.py
   -> orchestration/graph.py
     -> orchestration/state.py
     -> agents/guardian/agent.py -> services/llm.py
-      -> guardian_verdict attached to final briefing
+  -> memory/semantic.py -> services/embeddings.py -> Ollama /api/embed
+  -> memory/episodic.py
   -> observability/run_logger.py
 
 examples/memory_demo.py
@@ -694,6 +696,7 @@ examples/guardian_demo.py
   -> agents/guardian/agent.py -> services/llm.py
 
 examples/briefing_demo.py
+  -> examples/_demo_infra.py
   -> services/briefing.py
     -> orchestration/graph.py
       -> agents/synthesis/agent.py
@@ -701,10 +704,9 @@ examples/briefing_demo.py
     -> memory/episodic.py
     -> observability/run_logger.py
   -> services/briefing_templates.py
-  -> protocols/a2a/server.py
-  -> agents/* specialist A2A servers
 
 examples/scheduler_demo.py
+  -> examples/_demo_infra.py
   -> services/scheduler.py
     -> services/briefing.py
       -> LangGraph synthesis + Guardian pipeline
