@@ -1,4 +1,4 @@
-﻿"""Market Intelligence Agent."""
+"""Market Intelligence Agent."""
 
 from agents.market.agent import MarketIntelligenceAgent
 

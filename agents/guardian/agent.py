@@ -133,7 +133,11 @@ def _parse_json_from_llm(text: str) -> JsonDict:
 
 def _normalize_verdict(parsed: JsonDict) -> GuardianVerdict:
     confidence = _normalize_confidence(parsed.get("overall_confidence"))
-    checks = [_normalize_check(check) for check in parsed.get("claim_checks", []) if isinstance(check, dict)]
+    checks = [
+        _normalize_check(check)
+        for check in parsed.get("claim_checks", [])
+        if isinstance(check, dict)
+    ]
     flags = [str(flag) for flag in parsed.get("flags", []) if str(flag).strip()]
     passed = bool(parsed.get("passed", False)) and confidence != "LOW" and not flags
     return {

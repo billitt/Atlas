@@ -74,7 +74,11 @@ def render() -> None:
             }
             save_run(run_data)
             episodic_memory.log_briefing(run_data)
-            return {"briefing": briefing, "trace_id": trace_id, "duration_seconds": duration_seconds}
+            return {
+                "briefing": briefing,
+                "trace_id": trace_id,
+                "duration_seconds": duration_seconds,
+            }
 
         with st.spinner("Agents working..."):
             try:

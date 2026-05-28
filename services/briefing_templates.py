@@ -47,7 +47,9 @@ def format_daily_briefing(briefing: JsonDict) -> str:
 
 def format_summary_line(briefing: JsonDict) -> str:
     """Return a one-line notification summary."""
-    topics = briefing.get("topics") or [section.get("topic") for section in briefing.get("sections", [])]
+    topics = briefing.get("topics") or [
+        section.get("topic") for section in briefing.get("sections", [])
+    ]
     topic_text = ", ".join(str(topic) for topic in topics if topic)
     sections = briefing.get("sections", [])
     flagged = sum(1 for section in sections if (section.get("guardian_verdict") or {}).get("flags"))

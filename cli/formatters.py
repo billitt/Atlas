@@ -44,12 +44,18 @@ def format_query_result(briefing: JsonDict, *, trace_id: str | None = None) -> s
 
     guardian = briefing.get("guardian_verdict") or {}
     passed = guardian.get("passed", False)
-    pass_text = typer.style("PASSED", fg=typer.colors.GREEN) if passed else typer.style("FLAGGED", fg=typer.colors.RED)
+    pass_text = (
+        typer.style("PASSED", fg=typer.colors.GREEN)
+        if passed
+        else typer.style("FLAGGED", fg=typer.colors.RED)
+    )
     lines.append(
         f"Guardian: {_confidence_style(str(guardian.get('overall_confidence', 'LOW')))} ({pass_text})"
     )
 
-    lines.extend(["", typer.style("Analysis", bold=True), str(briefing.get("combined_analysis", "")).strip()])
+    lines.extend(
+        ["", typer.style("Analysis", bold=True), str(briefing.get("combined_analysis", "")).strip()]
+    )
 
     per_agent = briefing.get("per_agent_sources") or {}
     if per_agent:
@@ -72,7 +78,9 @@ def format_query_result(briefing: JsonDict, *, trace_id: str | None = None) -> s
 def format_briefing_output(briefing: JsonDict, *, trace_id: str | None = None) -> str:
     """Render a scheduled briefing with colored risk and confidence badges."""
     lines = [
-        typer.style(f"Atlas {str(briefing.get('briefing_type', 'daily')).title()} Briefing", bold=True),
+        typer.style(
+            f"Atlas {str(briefing.get('briefing_type', 'daily')).title()} Briefing", bold=True
+        ),
         f"Timestamp: {briefing.get('timestamp')}",
         f"Overall risk: {_confidence_style(str(briefing.get('overall_risk_level', 'LOW')))}",
     ]
@@ -92,7 +100,11 @@ def format_briefing_output(briefing: JsonDict, *, trace_id: str | None = None) -
         flags = guardian.get("flags") or []
         sources = section.get("sources") or []
         passed = guardian.get("passed", False)
-        pass_text = typer.style("passed", fg=typer.colors.GREEN) if passed else typer.style("flagged", fg=typer.colors.RED)
+        pass_text = (
+            typer.style("passed", fg=typer.colors.GREEN)
+            if passed
+            else typer.style("flagged", fg=typer.colors.RED)
+        )
         lines.extend(
             [
                 "",
@@ -171,7 +183,9 @@ def format_status(status: JsonDict) -> str:
     if last_briefing:
         lines.append(f"  Timestamp: {last_briefing.get('timestamp')}")
         lines.append(f"  Query: {last_briefing.get('query')}")
-        lines.append(f"  Confidence: {_confidence_style(str(last_briefing.get('confidence', 'LOW')))}")
+        lines.append(
+            f"  Confidence: {_confidence_style(str(last_briefing.get('confidence', 'LOW')))}"
+        )
     else:
         lines.append("  (none)")
 
@@ -194,7 +208,9 @@ def format_trace_tree(tree: str) -> str:
     for line in tree.splitlines():
         if line.startswith("trace_id="):
             trace_id = line.split("=", 1)[1]
-            lines.append(f"{typer.style('trace_id', bold=True)}={typer.style(trace_id, fg=typer.colors.CYAN)}")
+            lines.append(
+                f"{typer.style('trace_id', bold=True)}={typer.style(trace_id, fg=typer.colors.CYAN)}"
+            )
         elif line.strip().startswith("- "):
             name_part = line.strip()[2:]
             if " ms)" in name_part:

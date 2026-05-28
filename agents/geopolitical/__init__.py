@@ -1,4 +1,4 @@
-﻿"""Geopolitical Risk Agent."""
+"""Geopolitical Risk Agent."""
 
 from agents.geopolitical.agent import GeopoliticalRiskAgent
 

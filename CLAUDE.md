@@ -1,8 +1,10 @@
 # CLAUDE.md — Code Context for Claude
 
-This file is maintained by Cursor after each phase. Claude reads it to understand the codebase without re-reading every file. **Cursor: update this file at the end of every phase.**
+> **Project Complete (Phase 14).** All 14 phases implemented. Interview docs in `docs/`. Verification: `docs/VERIFICATION.md`. Demo: `atlas-taiwan-demo`.
 
-Last updated: Phase 13 (2026-05-27)
+This file is maintained by Cursor after each phase. Claude reads it to understand the codebase without re-reading every file.
+
+Last updated: Phase 14 (2026-05-27)
 
 ---
 
@@ -10,11 +12,11 @@ Last updated: Phase 13 (2026-05-27)
 
 | Metric | Value |
 |--------|-------|
-| Commits | 19 |
-| Total files | 142 |
-| Rust LOC | 959 |
-| Python LOC | 6,200 |
-| Phases complete | 0, 1A, 1B, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13 |
+| Commits | 23 |
+| Total files | 150 |
+| Rust LOC | 960 |
+| Python LOC | 5,939 |
+| Phases complete | 0, 1A, 1B, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14 |
 
 ---
 
@@ -675,6 +677,16 @@ Taiwan Strait demo (Phase 13) — single scenario exercises all paths:
 **docs/DEMO_SCRIPT.md**
 - Step-by-step interview walkthrough: prerequisites, scripted demo, CLI/dashboard paths, Q&A, fallbacks.
 
+**docs/ARCHITECTURE.md** — system design overview (~5 min read).
+**docs/AGENTS.md** — per-agent responsibility, MCP, reflection, Agent Card skills.
+**docs/PROTOCOLS.md** — MCP JSON-RPC and A2A delegation details.
+**docs/MEMORY.md** — three-tier memory, SQLite schemas, query examples.
+**docs/DATA_SOURCES.md** — MCP servers, external APIs, seed data, agent mappings.
+**docs/VERIFICATION.md** — pre-interview checklist, known limitations.
+
+**protocols/mcp/__init__.py** — exports `McpClient`.
+**orchestration/__init__.py** — exports `build_synthesis_graph`, `run_synthesis_graph`.
+
 Other demos:
 - `scripts/verify_ollama.py`
 - `examples/langgraph_hello.py`
@@ -852,6 +864,16 @@ Other demos:
 - Modified `pyproject.toml` — adds `ingestion` package and `atlas-taiwan-demo` script.
 - Modified `README.md` and `docs/DEVLOG.md` — Phase 13 status and demo instructions.
 - Verification: Ruff check and import smoke test completed successfully.
+
+### Phase 14 — Polish and Presentation
+- Ran `ruff check --fix` + `ruff format` across entire Python codebase (46 files reformatted).
+- Ran `cargo clippy --all` and `cargo fmt --all` on Rust workspace — no clippy warnings.
+- Created `docs/ARCHITECTURE.md`, `docs/AGENTS.md`, `docs/PROTOCOLS.md`, `docs/MEMORY.md`, `docs/DATA_SOURCES.md`, `docs/VERIFICATION.md`.
+- Modified `README.md` — Quick Start, What Makes This Different, Project Structure, Phase 14 complete.
+- Modified `protocols/mcp/__init__.py` — exports `McpClient`.
+- Modified `orchestration/__init__.py` — exports `run_synthesis_graph`.
+- Added ADR-011 in `docs/DEVLOG.md` for documentation structure.
+- Verification: full ruff pass, clippy pass, import smoke tests.
 
 ---
 

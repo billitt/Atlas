@@ -1,4 +1,4 @@
-﻿"""Synthesis Agent orchestration package."""
+"""Synthesis Agent orchestration package."""
 
 from agents.synthesis.agent import SynthesisAgent
 

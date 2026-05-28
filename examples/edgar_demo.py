@@ -30,7 +30,11 @@ async def run() -> None:
     print(json.dumps(filings, indent=2)[:3000])
 
     first = next(
-        (filing for filing in filings.get("filings", []) if filing.get("form_type") in {"10-K", "10-Q"}),
+        (
+            filing
+            for filing in filings.get("filings", [])
+            if filing.get("form_type") in {"10-K", "10-Q"}
+        ),
         None,
     )
     if first:

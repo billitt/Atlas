@@ -1,4 +1,4 @@
-﻿"""Research & Filing Agent."""
+"""Research & Filing Agent."""
 
 from agents.research.agent import ResearchFilingAgent
 

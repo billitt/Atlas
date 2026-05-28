@@ -74,7 +74,11 @@ def render() -> None:
         st.divider()
         st.subheader("Recent activity")
         if last_briefing:
-            st.markdown(f"**Last briefing:** {last_briefing.get('timestamp')} — {last_briefing.get('query', '')[:80]}")
+            st.markdown(
+                f"**Last briefing:** {last_briefing.get('timestamp')} — {last_briefing.get('query', '')[:80]}"
+            )
             st.caption(f"Confidence: {last_briefing.get('confidence')}")
         if last_alert:
-            st.markdown(f"**Last alert:** {last_alert.get('timestamp')} — {last_alert.get('rule_name')}")
+            st.markdown(
+                f"**Last alert:** {last_alert.get('timestamp')} — {last_alert.get('rule_name')}"
+            )

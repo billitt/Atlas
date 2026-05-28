@@ -30,8 +30,13 @@ def render() -> None:
 
     entries = list_traces()
     if not entries:
-        st.info("No traces found. Run a query with OTEL_EXPORT_TO=file or use the tracing demo first.")
-        st.code("$env:OTEL_EXPORT_TO = 'file'\natlas query \"Your question here\"", language="powershell")
+        st.info(
+            "No traces found. Run a query with OTEL_EXPORT_TO=file or use the tracing demo first."
+        )
+        st.code(
+            "$env:OTEL_EXPORT_TO = 'file'\natlas query \"Your question here\"",
+            language="powershell",
+        )
         return
 
     labels = []

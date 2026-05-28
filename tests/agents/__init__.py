@@ -1,1 +1,1 @@
-﻿"""Atlas package."""
+"""Atlas package."""

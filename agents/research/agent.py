@@ -189,7 +189,9 @@ Return ONLY JSON:
         try:
             self.semantic_memory.add_documents(
                 texts=[text],
-                metadatas=[{"source": "sec_edgar", "accession_number": accession, "cik": args.get("cik")}],
+                metadatas=[
+                    {"source": "sec_edgar", "accession_number": accession, "cik": args.get("cik")}
+                ],
                 ids=[f"sec::{accession}"],
             )
             print(f"[research.memory] Ingested filing text into semantic memory: {accession}")
@@ -211,7 +213,9 @@ def _fallback_ticker(query: str) -> str:
 
 def _query_needs_filing_text(query: str) -> bool:
     lowered = query.lower()
-    return any(token in lowered for token in ("risk", "disclosure", "md&a", "10-k", "10-q", "filing text"))
+    return any(
+        token in lowered for token in ("risk", "disclosure", "md&a", "10-k", "10-q", "filing text")
+    )
 
 
 def _first_periodic_filing(filings: dict[str, Any]) -> dict[str, Any] | None:

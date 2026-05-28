@@ -28,10 +28,7 @@ struct ToolsCallParams {
 }
 
 /// Route one JSON-RPC request to the appropriate MCP handler.
-pub async fn handle_json_rpc(
-    state: AppState,
-    request: JsonRpcRequest,
-) -> Json<Value> {
+pub async fn handle_json_rpc(state: AppState, request: JsonRpcRequest) -> Json<Value> {
     if request.jsonrpc != "2.0" {
         return Json(json_rpc_error(
             request.id,
@@ -97,16 +94,12 @@ async fn handle_tools_call(
     state: &AppState,
     params: Option<Value>,
 ) -> Result<Value, (i32, String)> {
-    let params: ToolsCallParams = serde_json::from_value(
-        params.unwrap_or(Value::Object(Default::default())),
-    )
-    .map_err(|e| (-32602, format!("invalid tools/call params: {e}")))?;
+    let params: ToolsCallParams =
+        serde_json::from_value(params.unwrap_or(Value::Object(Default::default())))
+            .map_err(|e| (-32602, format!("invalid tools/call params: {e}")))?;
 
     if params.name != "get_quote" {
-        return Err((
-            -32602,
-            format!("unknown tool: {}", params.name),
-        ));
+        return Err((-32602, format!("unknown tool: {}", params.name)));
     }
 
     let symbol = params

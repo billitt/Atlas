@@ -115,7 +115,7 @@ async def run() -> None:
 
     print("Atlas Taiwan Strait Demo (Phase 13)")
     print("Prerequisites: Ollama, MCP market :8001, MCP EDGAR :8002")
-    print("Equivalent via CLI: atlas query \"...Taiwan Strait...\"")
+    print('Equivalent via CLI: atlas query "...Taiwan Strait..."')
     print("Equivalent via dashboard: Query page with the same question")
     print("-" * 80)
 
@@ -173,8 +173,10 @@ async def run() -> None:
         guardian_verdict = briefing.get("guardian_verdict", {})
 
         print(f"\nOverall confidence: {briefing.get('overall_confidence')}")
-        print(f"Guardian passed: {guardian_verdict.get('passed')} "
-              f"({guardian_verdict.get('overall_confidence')})")
+        print(
+            f"Guardian passed: {guardian_verdict.get('passed')} "
+            f"({guardian_verdict.get('overall_confidence')})"
+        )
         print(f"trace_id: {trace_id}")
         print("\n--- Combined analysis (excerpt) ---")
         text = briefing.get("combined_analysis", "")
@@ -231,7 +233,7 @@ async def run() -> None:
                 "Interaction: Alert fired, Query answered, Briefing generated",
                 f"Observability: trace_id={trace_id or 'n/a'} spans={span_count} query={query_duration}s total={total_duration}s",
                 "Architecture: Rust MCP data layer + Python intelligence layer + LangGraph orchestration",
-                "Also runnable: atlas query \"...\" | Dashboard Query page (same pipeline)",
+                'Also runnable: atlas query "..." | Dashboard Query page (same pipeline)',
             ],
         )
     finally:

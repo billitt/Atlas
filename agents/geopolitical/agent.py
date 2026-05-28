@@ -161,7 +161,9 @@ Return ONLY valid JSON:
         for match in matches:
             metadata = match.get("metadata") or {}
             if metadata.get("category") == "geopolitical" or metadata.get("source") == "seed_gdelt":
-                sources.append({"type": "semantic_memory", **metadata, "excerpt": match.get("text", "")[:400]})
+                sources.append(
+                    {"type": "semantic_memory", **metadata, "excerpt": match.get("text", "")[:400]}
+                )
             lines.append(
                 f"- {match['text']}\n  metadata={metadata} distance={match.get('distance')}"
             )

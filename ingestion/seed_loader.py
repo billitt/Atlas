@@ -118,7 +118,9 @@ def load_taiwan_scenario(
     texts, metadatas, ids = _scenario_documents()
     memory.add_documents(texts, metadatas, ids)
     count = memory.count()
-    print(f"[seed_loader] Ingested {len(texts)} seed documents ({count} total chunks in semantic memory)")
+    print(
+        f"[seed_loader] Ingested {len(texts)} seed documents ({count} total chunks in semantic memory)"
+    )
     return len(texts)
 
 

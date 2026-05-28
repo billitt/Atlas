@@ -1,1 +1,1 @@
-﻿"""Atlas Typer CLI."""
+"""Atlas Typer CLI."""

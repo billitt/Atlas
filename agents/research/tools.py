@@ -56,7 +56,11 @@ async def call_full_text_search(
     form_type: str | None = None,
     date_from: str | None = None,
 ) -> dict[str, Any]:
-    args = {k: v for k, v in {"query": query, "form_type": form_type, "date_from": date_from}.items() if v}
+    args = {
+        k: v
+        for k, v in {"query": query, "form_type": form_type, "date_from": date_from}.items()
+        if v
+    }
     raw = await client.call_tool("full_text_search", args)
     return _parse_tool_result(raw)
 

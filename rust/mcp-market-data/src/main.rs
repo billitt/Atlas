@@ -59,9 +59,7 @@ async fn main() {
     println!("  GET  /health — liveness");
     println!("  POST /mcp    — JSON-RPC 2.0 (initialize, tools/list, tools/call)");
 
-    axum::serve(listener, app)
-        .await
-        .expect("server error");
+    axum::serve(listener, app).await.expect("server error");
 }
 
 async fn health() -> Json<serde_json::Value> {

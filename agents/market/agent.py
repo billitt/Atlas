@@ -123,7 +123,9 @@ JSON schema:
             raise ValueError(f"plan phase returned invalid tool_calls: {parsed!r}")
         print(f"[plan] Granite selected {len(calls)} tool call(s)")
         for call in calls:
-            print(f"       -> {call.get('tool')}({call.get('arguments')}) - {call.get('rationale', '')}")
+            print(
+                f"       -> {call.get('tool')}({call.get('arguments')}) - {call.get('rationale', '')}"
+            )
         return calls
 
     async def execute(self, query: str, plan: list[dict[str, Any]]) -> AgentResult:

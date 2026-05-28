@@ -1,4 +1,4 @@
-﻿"""Supply Chain Agent."""
+"""Supply Chain Agent."""
 
 from agents.supply_chain.agent import SupplyChainAgent
 

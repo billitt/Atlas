@@ -180,7 +180,10 @@ class EpisodicMemory:
         return [
             record
             for record in records
-            if any(term in record.query.lower() or term in record.final_briefing.lower() for term in lowered)
+            if any(
+                term in record.query.lower() or term in record.final_briefing.lower()
+                for term in lowered
+            )
         ][:limit]
 
     def query_briefings_by_date(self, start: datetime, end: datetime) -> list[BriefingRecord]:

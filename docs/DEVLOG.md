@@ -773,3 +773,57 @@ python -m examples.synthesis_demo
 
 **Complete** when `atlas-taiwan-demo` runs all six steps, seed data grounds Geopolitical and Supply Chain agents, and CLI/dashboard produce equivalent synthesis output for the Taiwan query.
 
+---
+
+## Phase 14 — Polish and presentation
+
+**Goal:** Make Atlas interview-ready: lint/format cleanup, comprehensive documentation, verification checklist.
+
+### Added
+
+| Path | Purpose |
+|------|---------|
+| `docs/ARCHITECTURE.md` | System design overview, language boundary, protocol and memory rationale |
+| `docs/AGENTS.md` | Per-agent reference: responsibility, MCP, reflection, Agent Card skills |
+| `docs/PROTOCOLS.md` | MCP and A2A implementation details |
+| `docs/MEMORY.md` | Three-tier memory with schemas and examples |
+| `docs/DATA_SOURCES.md` | MCP servers, external APIs, seed data, agent mappings |
+| `docs/VERIFICATION.md` | Pre-interview command checklist and known limitations |
+
+### Modified
+
+| Path | Change |
+|------|--------|
+| `README.md` | Quick Start, What Makes This Different, Project Structure, Phase 14 complete |
+| `protocols/mcp/__init__.py` | Exports `McpClient` |
+| `orchestration/__init__.py` | Exports `run_synthesis_graph` |
+| Entire codebase | `ruff check --fix` + `ruff format`; Rust `cargo clippy` + `cargo fmt` |
+
+### Implementation notes
+
+- No new features — documentation and cleanup only.
+- Example scripts retained; each demonstrates a distinct pipeline stage.
+- Commit history reviewed; vague early messages noted in VERIFICATION.md (no history rewrite).
+
+### Verification
+
+- `python -m ruff check .` — all passed
+- `cargo clippy --all -- -W clippy::all` — no warnings
+- Import smoke tests for cli, ui, taiwan_demo, ingestion, orchestration, protocols.mcp
+
+### Phase 14 outcome
+
+**Complete** when documentation set is published, README Quick Start works, and VERIFICATION.md checklist passes.
+
+---
+
+## ADR-011: Documentation structure for interview presentation
+
+**Status:** Accepted (Phase 14)
+
+**Context:** Portfolio reviewers need to understand Atlas in under 10 minutes without reading source code.
+
+**Decision:** Split documentation by concern — ARCHITECTURE (system), AGENTS (behavior), PROTOCOLS (MCP/A2A), MEMORY (persistence), DATA_SOURCES (external deps), DEMO_SCRIPT (live walkthrough), VERIFICATION (checklist).
+
+**Consequences:** README stays concise with links; deep dives live in `docs/`. CLAUDE.md remains the AI-oriented file map.
+

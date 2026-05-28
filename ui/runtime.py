@@ -55,7 +55,9 @@ def get_ollama_vram() -> str | None:
         return None
 
 
-def check_prerequisites(*, require_mcp: bool = True, require_ollama: bool = True) -> tuple[bool, list[str]]:
+def check_prerequisites(
+    *, require_mcp: bool = True, require_ollama: bool = True
+) -> tuple[bool, list[str]]:
     """Return whether required services are up and human-readable issue messages."""
     status = get_status()
     issues: list[str] = []
@@ -73,9 +75,13 @@ def check_prerequisites(*, require_mcp: bool = True, require_ollama: bool = True
             if not server.get("reachable"):
                 name = server.get("name", "mcp")
                 if "market" in name:
-                    issues.append(f"{name} down on {server.get('url')} — run: cargo run -p mcp-market-data")
+                    issues.append(
+                        f"{name} down on {server.get('url')} — run: cargo run -p mcp-market-data"
+                    )
                 elif "edgar" in name:
-                    issues.append(f"{name} down on {server.get('url')} — run: cargo run -p mcp-edgar")
+                    issues.append(
+                        f"{name} down on {server.get('url')} — run: cargo run -p mcp-edgar"
+                    )
                 else:
                     issues.append(f"{name} down on {server.get('url')}")
 
@@ -145,7 +151,11 @@ def fetch_agent_cards_status() -> list[JsonDict]:
                 reachable = response.status_code == 200
                 if reachable:
                     payload = response.json()
-                    skills = [skill.get("id", "") for skill in payload.get("skills", []) if skill.get("id")]
+                    skills = [
+                        skill.get("id", "")
+                        for skill in payload.get("skills", [])
+                        if skill.get("id")
+                    ]
         except httpx.HTTPError:
             pass
         port = url.rsplit(":", 1)[-1]

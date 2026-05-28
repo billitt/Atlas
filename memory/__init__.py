@@ -1,4 +1,4 @@
-﻿"""Atlas three-tier memory package."""
+"""Atlas three-tier memory package."""
 
 from memory.episodic import AlertRecord, AgentExecution, BriefingRecord, EpisodicMemory
 from memory.semantic import SemanticMemory

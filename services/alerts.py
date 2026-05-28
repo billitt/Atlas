@@ -148,7 +148,9 @@ class AlertEngine:
         sources = []
         for symbol in symbols:
             raw = await client.call_tool("get_quote", {"symbol": symbol})
-            sources.append({"tool": "get_quote", "symbol": symbol, "result": _extract_mcp_json(raw)})
+            sources.append(
+                {"tool": "get_quote", "symbol": symbol, "result": _extract_mcp_json(raw)}
+            )
         return {"type": "market", "rule": asdict(rule), "sources": sources}
 
     async def _filing_activity_data(self, rule: AlertRule) -> JsonDict:

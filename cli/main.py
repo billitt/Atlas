@@ -98,7 +98,9 @@ def agent_runtime() -> Iterator[list[dict[str, Any]]]:
             server.shutdown()
 
 
-def _build_synthesis_stack(agent_cards: list[dict[str, Any]]) -> tuple[SynthesisAgent, EpisodicMemory]:
+def _build_synthesis_stack(
+    agent_cards: list[dict[str, Any]],
+) -> tuple[SynthesisAgent, EpisodicMemory]:
     episodic_memory = EpisodicMemory()
     synthesis_agent = SynthesisAgent(agent_cards, episodic_memory=episodic_memory)
     return synthesis_agent, episodic_memory
@@ -110,7 +112,9 @@ def _collect_status() -> JsonDict:
     try:
         models = list_models()
         ollama_reachable = True
-        model_loaded = any(OLLAMA_CHAT_MODEL.split(":")[0] in m for m in models) or OLLAMA_CHAT_MODEL in models
+        model_loaded = (
+            any(OLLAMA_CHAT_MODEL.split(":")[0] in m for m in models) or OLLAMA_CHAT_MODEL in models
+        )
     except Exception:
         models = []
 
@@ -284,12 +288,16 @@ def query_command(
 
 @app.command("briefing")
 def briefing_command(
-    briefing_type: str = typer.Option("daily", "--type", help="Briefing type: daily, weekly, or custom."),
+    briefing_type: str = typer.Option(
+        "daily", "--type", help="Briefing type: daily, weekly, or custom."
+    ),
     topics: str | None = typer.Option(None, "--topics", help="Comma-separated watchlist override."),
 ) -> None:
     """Generate a scheduled-style briefing over the default or custom watchlist."""
     _maybe_init_tracing()
-    selected_topics = [part.strip() for part in topics.split(",") if part.strip()] if topics else None
+    selected_topics = (
+        [part.strip() for part in topics.split(",") if part.strip()] if topics else None
+    )
     typer.echo(f"Generating {briefing_type} briefing...")
     typer.echo("Starting specialist A2A servers...")
 

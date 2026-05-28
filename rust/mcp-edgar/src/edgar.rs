@@ -78,7 +78,9 @@ pub async fn resolve_ticker(client: &reqwest::Client, ticker: &str) -> Result<St
             return Ok(pad_cik(&company.cik_str.to_string()));
         }
     }
-    Err(format!("ticker not found in SEC company_tickers.json: {ticker}"))
+    Err(format!(
+        "ticker not found in SEC company_tickers.json: {ticker}"
+    ))
 }
 
 pub async fn company_filings(
@@ -109,9 +111,17 @@ pub async fn company_filings(
     let mut filings = Vec::new();
     let count = recent.accession_number.len().min(10);
     for index in 0..count {
-        let accession = recent.accession_number.get(index).cloned().unwrap_or_default();
+        let accession = recent
+            .accession_number
+            .get(index)
+            .cloned()
+            .unwrap_or_default();
         let accession_no_dashes = accession.replace('-', "");
-        let primary_document = recent.primary_document.get(index).cloned().unwrap_or_default();
+        let primary_document = recent
+            .primary_document
+            .get(index)
+            .cloned()
+            .unwrap_or_default();
         let primary_document_url = format!(
             "{SEC_ARCHIVES}/{}/{}/{}",
             cik.trim_start_matches('0'),

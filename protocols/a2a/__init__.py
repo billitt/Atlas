@@ -1,4 +1,4 @@
-﻿"""A2A protocol helpers for Atlas agent-to-agent communication."""
+"""A2A protocol helpers for Atlas agent-to-agent communication."""
 
 from protocols.a2a.client import A2AClient
 from protocols.a2a.discovery import AgentRegistry

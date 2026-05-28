@@ -35,7 +35,9 @@ class BaseAgent(ABC):
             "SupplyChainAgent": "supply_chain",
             "ResearchFilingAgent": "research",
         }
-        return mapping.get(self.__class__.__name__, self.__class__.__name__.replace("Agent", "").lower())
+        return mapping.get(
+            self.__class__.__name__, self.__class__.__name__.replace("Agent", "").lower()
+        )
 
     @abstractmethod
     async def plan(self, query: str) -> Any:
@@ -69,7 +71,9 @@ class BaseAgent(ABC):
                     print("[plan] Deciding which data sources to query...")
                     plan = await self.plan(query)
                     if reflection_feedback:
-                        print(f"[plan] Incorporating reflection feedback: {reflection_feedback[:200]}...")
+                        print(
+                            f"[plan] Incorporating reflection feedback: {reflection_feedback[:200]}..."
+                        )
 
                 with _tracer.start_as_current_span("agent.execute") as execute_span:
                     execute_span.set_attribute("agent_name", self.agent_name)
@@ -77,7 +81,9 @@ class BaseAgent(ABC):
                     exec_start = perf_counter()
                     print("[execute] Fetching MCP data and drafting analysis...")
                     draft = await self.execute(query, plan)
-                    execute_span.set_attribute("duration_ms", round((perf_counter() - exec_start) * 1000, 3))
+                    execute_span.set_attribute(
+                        "duration_ms", round((perf_counter() - exec_start) * 1000, 3)
+                    )
                     last_draft = draft
 
                 with _tracer.start_as_current_span("agent.reflect") as reflect_span:
@@ -89,12 +95,16 @@ class BaseAgent(ABC):
                     draft["confidence"] = confidence
                     reflect_span.set_attribute("reflection_passed", passed)
                     reflect_span.set_attribute("confidence", confidence)
-                    reflect_span.set_attribute("duration_ms", round((perf_counter() - reflect_start) * 1000, 3))
+                    reflect_span.set_attribute(
+                        "duration_ms", round((perf_counter() - reflect_start) * 1000, 3)
+                    )
 
                 if passed:
                     print(f"[reflect] PASSED - confidence {confidence}")
                     run_span.set_attribute("confidence", confidence)
-                    run_span.set_attribute("duration_ms", round((perf_counter() - run_start) * 1000, 3))
+                    run_span.set_attribute(
+                        "duration_ms", round((perf_counter() - run_start) * 1000, 3)
+                    )
                     return draft
 
                 reflection_feedback = feedback

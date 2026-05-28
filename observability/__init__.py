@@ -1,4 +1,4 @@
-﻿"""Observability helpers for Atlas."""
+"""Observability helpers for Atlas."""
 
 from observability.run_logger import save_run
 from observability.trace_reader import format_trace_tree, list_traces, load_trace

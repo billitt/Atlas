@@ -24,7 +24,11 @@ def main() -> None:
 
     print("Available models:")
     for name in models:
-        marker = " <-- configured" if name == OLLAMA_CHAT_MODEL or name.startswith(OLLAMA_CHAT_MODEL) else ""
+        marker = (
+            " <-- configured"
+            if name == OLLAMA_CHAT_MODEL or name.startswith(OLLAMA_CHAT_MODEL)
+            else ""
+        )
         print(f"  - {name}{marker}")
 
     if not any(m == OLLAMA_CHAT_MODEL or m.startswith(f"{OLLAMA_CHAT_MODEL}") for m in models):

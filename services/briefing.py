@@ -76,7 +76,9 @@ class BriefingEngine:
                     briefing = state["briefing"]
                     delta = _delta_from_last(topic, briefing, last)
                     deltas.append(delta)
-                    topic_span.set_attribute("confidence", briefing.get("overall_confidence", "LOW"))
+                    topic_span.set_attribute(
+                        "confidence", briefing.get("overall_confidence", "LOW")
+                    )
                     sections.append(
                         {
                             "topic": topic,
@@ -115,10 +117,14 @@ class BriefingEngine:
             "overall_risk_level": briefing["overall_risk_level"],
             "duration_seconds": briefing["duration_seconds"],
             "agent_results": briefing["sections"],
-            "sources": [source for section in briefing["sections"] for source in section["sources"]],
+            "sources": [
+                source for section in briefing["sections"] for source in section["sources"]
+            ],
             "confidence": briefing["overall_risk_level"],
             "final_briefing": _briefing_text_for_memory(briefing),
-            "guardian_verdict": {"sections": [section["guardian_verdict"] for section in briefing["sections"]]},
+            "guardian_verdict": {
+                "sections": [section["guardian_verdict"] for section in briefing["sections"]]
+            },
             "delta_from_last": briefing["delta_from_last"],
             "trace_id": briefing.get("trace_id") or get_current_trace_id(),
             "per_topic": [

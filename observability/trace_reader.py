@@ -122,10 +122,7 @@ def _format_node(node: JsonDict, *, depth: int) -> list[str]:
         if key in attrs:
             attr_bits.append(f"{key}={attrs[key]}")
     attr_text = f" [{', '.join(attr_bits)}]" if attr_bits else ""
-    line = (
-        f"{indent}- {node.get('name')} "
-        f"({node.get('duration_ms', 0)} ms){attr_text}"
-    )
+    line = f"{indent}- {node.get('name')} ({node.get('duration_ms', 0)} ms){attr_text}"
     lines = [line]
     for child in node.get("children") or []:
         lines.extend(_format_node(child, depth=depth + 1))

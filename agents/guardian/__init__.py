@@ -1,4 +1,4 @@
-﻿"""Guardian validation agent."""
+"""Guardian validation agent."""
 
 from agents.guardian.agent import ClaimCheck, GuardianAgent, GuardianVerdict
 

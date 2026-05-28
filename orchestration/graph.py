@@ -61,7 +61,9 @@ def build_synthesis_graph(
             span.set_attribute("query", state["query"])
             span.set_attribute("agent_count", len(state.get("agent_results") or []))
             print("[graph.synthesize] Creating unified briefing")
-            guardian_feedback = state.get("guardian_verdict") if state.get("guardian_retries", 0) else None
+            guardian_feedback = (
+                state.get("guardian_verdict") if state.get("guardian_retries", 0) else None
+            )
             briefing = agent.synthesize(
                 state["query"],
                 state["plan"],

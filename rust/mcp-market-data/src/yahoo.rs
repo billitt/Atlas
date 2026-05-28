@@ -65,10 +65,7 @@ struct ChartError {
 }
 
 /// Fetch and parse recent chart data for `symbol`.
-pub async fn fetch_quote(
-    client: &reqwest::Client,
-    symbol: &str,
-) -> Result<Quote, String> {
+pub async fn fetch_quote(client: &reqwest::Client, symbol: &str) -> Result<Quote, String> {
     let symbol = symbol.trim().to_uppercase();
     if symbol.is_empty() {
         return Err("symbol must not be empty".into());
@@ -90,10 +87,7 @@ pub async fn fetch_quote(
         .previous_close
         .or(meta.chart_previous_close)
         .ok_or_else(|| format!("missing previous close for '{symbol}'"))?;
-    let currency = meta
-        .currency
-        .clone()
-        .unwrap_or_else(|| "USD".into());
+    let currency = meta.currency.clone().unwrap_or_else(|| "USD".into());
     let volume = meta.regular_market_volume.unwrap_or(0);
     // Fetch separate history only for volume baselines. This avoids corrupting the
     // previous-close semantics used above while still grounding volume comparisons.

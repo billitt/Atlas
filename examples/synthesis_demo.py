@@ -47,9 +47,7 @@ async def run() -> None:
         registry = load_cards("agents")
         discovered_cards = registry.discover_all()
         agent_cards = [
-            card
-            for card in discovered_cards
-            if "guardian" not in str(card.get("name", "")).lower()
+            card for card in discovered_cards if "guardian" not in str(card.get("name", "")).lower()
         ]
         episodic_memory = EpisodicMemory()
         semantic_memory = SemanticMemory()
