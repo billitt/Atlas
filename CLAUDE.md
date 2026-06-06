@@ -4,7 +4,7 @@
 
 This file is maintained by Cursor after each phase. Claude reads it to understand the codebase without re-reading every file.
 
-Last updated: Phase 14 (2026-05-27)
+Last updated: Phase 14.1 (2026-05-27)
 
 ---
 
@@ -87,7 +87,7 @@ Taiwan Strait demo (Phase 13) — single scenario exercises all paths:
     -> LangGraph synthesis (4 A2A agents + Guardian)
     -> BriefingEngine (single topic + delta)
     -> OpenTelemetry trace tree
-  Equivalent: atlas query "..." | ui/pages/query.py (after seeding)
+  Equivalent: atlas query "..." | ui/views/query.py (after seeding)
   Interview script: docs/DEMO_SCRIPT.md
 ```
 
@@ -545,36 +545,43 @@ Taiwan Strait demo (Phase 13) — single scenario exercises all paths:
 ### UI — Streamlit Dashboard
 
 **ui/streamlit_app.py**
-- `run_dashboard() -> None` — page config, sidebar nav, auto-start A2A agents, route to pages
-- `render_sidebar_status() -> None` — compact Ollama/MCP/memory status in sidebar
-- `main() -> None` — launches `streamlit run` for `atlas-dashboard` entry point
+- `run_dashboard() -> None` — page config, sidebar nav, auto-start A2A agents, route to views
+- `render_sidebar_status() -> None` — compact Ollama/MCP/memory status in sidebar (cached via `get_status()`)
+- `main() -> None` — subprocess-only launcher for `atlas-dashboard` entry point
+- `_streamlit_script_active() -> bool` — guards `run_dashboard()` to Streamlit script context only
 - `PAGES: dict[str, Callable[[], None]]` — Query, Briefings, Alerts, Agent Status, Trace Viewer
 
 **ui/runtime.py**
-- `get_status() -> dict[str, Any]` — wraps `cli.main._collect_status()`
-- `get_ollama_vram() -> str | None` — Ollama `/api/ps` VRAM summary
+- `get_status() -> dict` — cached 10s via `@st.cache_data`; wraps `cli.main._collect_status()`
+- `fetch_agent_cards_status() -> list[dict]` — cached 15s; probe `:9001`–`:9004` agent cards
+- `get_ollama_vram() -> str | None` — cached 30s; Ollama `/api/ps` VRAM summary
 - `check_prerequisites(*, require_mcp, require_ollama) -> tuple[bool, list[str]]`
 - `show_prerequisite_warnings(...) -> bool` — display st.warning for missing services
-- `ensure_agent_runtime() -> list[dict]` — session-scoped A2A server startup
-- `get_agent_cards() -> list[dict]`, `build_synthesis_stack()`, `build_alert_engine()`
-- `fetch_agent_cards_status() -> list[dict]` — probe `:9001`–`:9004` agent cards
+- `ensure_agent_runtime() -> list[dict]` — session-scoped A2A startup with `agent_boot_in_progress` guard
+- `get_agent_cards() -> list[dict]`, `build_synthesis_stack()` (`@st.cache_resource`), `build_alert_engine()` (`@st.cache_resource`)
 - `find_run_log_by_trace_id(trace_id: str) -> Path | None`
 
-**ui/components.py**
-- `confidence_badge(level: str) -> None`
-- `guardian_badge(passed: bool) -> None`
-- `severity_badge(severity: str) -> None`
-- `agent_status_card(name, port, reachable, skills) -> None`
-- `source_list(sources: list | dict) -> None`
-- `duration_color(duration_ms: float) -> str`
-- `render_span_tree(nodes: list[dict], *, depth: int = 0) -> None`
-- `service_down_message(title: str, detail: str) -> None`
+**ui/styles.py**
+- `PALETTE`, `CONFIDENCE_COLORS`, `SEVERITY_COLORS` — design tokens
+- `global_css() -> str` — dashboard-wide CSS
 
-**ui/pages/query.py** — `render() -> None` — synthesis Q&A with Guardian, sources, trace link
-**ui/pages/briefings.py** — `render() -> None` — generate briefings + episodic history table
-**ui/pages/alerts.py** — `render() -> None` — check rules, watch fragment, alert history feed
-**ui/pages/agent_status.py** — `render() -> None` — Ollama/MCP/agent/memory status grid
-**ui/pages/trace_viewer.py** — `render() -> None` — trace list, span tree, run-log link
+**ui/components.py**
+- `confidence_badge(level: str) -> None`, `guardian_badge(passed: bool) -> None`, `severity_badge(severity: str) -> None`
+- `metric_card(label, value, *, status: str | None) -> None`
+- `agent_status_card(name, port, reachable, skills) -> None`
+- `alert_card(title, severity, summary, *, evidence, context) -> None`
+- `delta_callout(text: str) -> None`, `source_list(sources) -> None`
+- `render_trace_tree_html(nodes, *, height: int = 520) -> None` — HTML/CSS collapsible tree
+- `render_span_tree(nodes, *, depth: int = 0) -> None` — Streamlit fallback
+- `service_down_message(title, detail) -> None`
+
+**ui/views/query.py** — `render() -> None` — tabbed synthesis Q&A (Analysis | Guardian | Sources | Trace)
+**ui/views/briefings.py** — `render() -> None` — briefing generator + episodic history
+**ui/views/alerts.py** — `render() -> None` — alert check, watch fragment, severity-bordered cards
+**ui/views/agent_status.py** — `render() -> None` — metric grid for Ollama, MCP, agents, memory
+**ui/views/trace_viewer.py** — `render() -> None` — HTML span tree + plain-text fallback
+
+**.streamlit/config.toml** — `headless`, `showSidebarNavigation = false` (disables auto page discovery)
 
 ### Examples / Scripts
 
@@ -875,6 +882,14 @@ Other demos:
 - Added ADR-011 in `docs/DEVLOG.md` for documentation structure.
 - Verification: full ruff pass, clippy pass, import smoke tests.
 
+### Phase 14.1 — Streamlit UI fixes
+- Renamed `ui/pages/` → `ui/views/` to prevent Streamlit auto page discovery (duplicate sidebar tabs).
+- Fixed `ui/streamlit_app.py` recursive launch: `run_dashboard()` only when Streamlit script context is active (`get_script_run_ctx()`); `main()` subprocess only.
+- Added `.streamlit/config.toml` with `headless` and `showSidebarNavigation = false`.
+- Added `ui/styles.py` design system; polished `ui/components.py` (pills, metric cards, HTML trace tree).
+- Cached `get_status()` (10s), `fetch_agent_cards_status()` (15s), synthesis stack and alert engine via `@st.cache_*`.
+- Updated all views: tabbed query results, status grid, alert cards, HTML trace viewer, briefing callouts.
+
 ---
 
 ## Dependencies Between Files
@@ -964,11 +979,11 @@ cli/main.py
 ui/streamlit_app.py
   -> ui/runtime.py -> cli/main.py + examples/_demo_infra.py
   -> ui/components.py
-  -> ui/pages/query.py -> orchestration/graph.py, observability/run_logger.py, memory/episodic.py
-  -> ui/pages/briefings.py -> services/briefing.py, memory/episodic.py
-  -> ui/pages/alerts.py -> services/alerts.py, services/alert_defaults.py
-  -> ui/pages/agent_status.py -> ui/runtime.py
-  -> ui/pages/trace_viewer.py -> observability/trace_reader.py, ui/runtime.py
+  -> ui/views/query.py -> orchestration/graph.py, observability/run_logger.py, memory/episodic.py
+  -> ui/views/briefings.py -> services/briefing.py, memory/episodic.py
+  -> ui/views/alerts.py -> services/alerts.py, services/alert_defaults.py
+  -> ui/views/agent_status.py -> ui/runtime.py
+  -> ui/views/trace_viewer.py -> observability/trace_reader.py, ui/runtime.py
 
 ingestion/seed_loader.py
   -> memory/semantic.py -> services/embeddings.py -> Ollama /api/embed

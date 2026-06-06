@@ -8,8 +8,9 @@ from pathlib import Path
 
 import streamlit as st
 
-from ui.pages import agent_status, alerts, briefings, query, trace_viewer
 from ui.runtime import ensure_agent_runtime, get_status
+from ui.styles import global_css
+from ui.views import agent_status, alerts, briefings, query, trace_viewer
 
 PAGES = {
     "Query": query.render,
@@ -44,8 +45,10 @@ def render_sidebar_status() -> None:
         st.sidebar.error("A2A agents: failed to start")
     elif st.session_state.get("agent_cards"):
         st.sidebar.success("A2A agents: running")
-    else:
+    elif st.session_state.get("agent_boot_in_progress"):
         st.sidebar.caption("A2A agents: starting...")
+    else:
+        st.sidebar.caption("A2A agents: idle")
 
 
 def run_dashboard() -> None:
@@ -57,16 +60,9 @@ def run_dashboard() -> None:
         initial_sidebar_state="expanded",
     )
 
-    st.markdown(
-        """
-        <style>
-        .stApp { background-color: #0e1117; }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
+    st.markdown(global_css(), unsafe_allow_html=True)
 
-    if "agents_started" not in st.session_state:
+    if not st.session_state.get("agents_started"):
         st.session_state.agents_started = True
         ensure_agent_runtime()
 
@@ -94,7 +90,17 @@ def main() -> None:
     )
 
 
-run_dashboard()
+def _streamlit_script_active() -> bool:
+    """True when Streamlit is executing this file (not a plain Python import)."""
+    try:
+        from streamlit.runtime.scriptrunner import get_script_run_ctx
 
-if __name__ == "__main__":
+        return get_script_run_ctx() is not None
+    except ImportError:
+        return False
+
+
+if _streamlit_script_active():
+    run_dashboard()
+elif __name__ == "__main__":
     main()

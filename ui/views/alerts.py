@@ -1,4 +1,4 @@
-"""Alert feed page."""
+"""Alert feed view."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from sqlmodel import Session, select
 
 from memory.episodic import AlertRecord, EpisodicMemory
 from services.alert_defaults import default_alert_rules
-from ui.components import severity_badge
+from ui.components import alert_card, severity_badge
 from ui.runtime import build_alert_engine, show_prerequisite_warnings
 
 JsonDict = dict[str, Any]
@@ -75,11 +75,13 @@ def render() -> None:
             st.success("No alerts triggered.")
         else:
             for alert in triggered:
-                with st.expander(f"🚨 {alert['rule_name']} — {alert['severity']}", expanded=True):
-                    st.markdown(f"**Summary:** {alert.get('summary')}")
-                    st.markdown(f"**Evidence:** {alert.get('evidence')}")
-                    st.markdown(f"**Context:** {alert.get('context')}")
-                    st.json(alert.get("sources") or [])
+                alert_card(
+                    f"🚨 {alert['rule_name']}",
+                    str(alert.get("severity", "LOW")),
+                    str(alert.get("summary", "")),
+                    evidence=str(alert.get("evidence", "")),
+                    context=str(alert.get("context", "")),
+                )
 
     st.divider()
     st.subheader("Watch loop")
@@ -113,9 +115,12 @@ def render() -> None:
         st.error(st.session_state.watch_error)
 
     for alert in reversed(st.session_state.get("watch_results") or []):
-        with st.expander(f"Watch: {alert.get('rule_name')} — {alert.get('triggered_at')}"):
-            st.markdown(f"**Summary:** {alert.get('summary')}")
-            st.json(alert.get("sources") or [])
+        alert_card(
+            f"Watch: {alert.get('rule_name')} — {alert.get('triggered_at')}",
+            str(alert.get("severity", "LOW")),
+            str(alert.get("summary", "")),
+            evidence=str(alert.get("evidence", "")),
+        )
 
     st.divider()
     st.subheader("Alert history")
@@ -135,8 +140,10 @@ def render() -> None:
             f"{record.timestamp} — {record.rule_name} [{record.severity}]",
             expanded=False,
         ):
-            severity_badge(record.severity)
-            st.markdown(f"**Summary:** {record.summary}")
-            st.markdown(f"**Evidence:** {record.evidence}")
-            st.markdown(f"**Context:** {record.context}")
-            st.json(record.sources or [])
+            alert_card(
+                record.rule_name,
+                record.severity,
+                record.summary,
+                evidence=record.evidence,
+                context=record.context,
+            )

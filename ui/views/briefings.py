@@ -1,4 +1,4 @@
-"""Briefing viewer page."""
+"""Briefing viewer."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from sqlmodel import Session, select
 from agents.guardian.agent import GuardianAgent
 from memory.episodic import BriefingRecord, EpisodicMemory
 from services.briefing import DEFAULT_WATCHLIST, BriefingEngine
-from ui.components import confidence_badge, guardian_badge, severity_badge
+from ui.components import confidence_badge, delta_callout, guardian_badge, severity_badge
 from ui.runtime import build_synthesis_stack, get_agent_cards, show_prerequisite_warnings
 
 JsonDict = dict[str, Any]
@@ -61,22 +61,20 @@ def render() -> None:
     if briefing:
         st.divider()
         st.subheader(f"{briefing.get('briefing_type', 'daily').title()} Briefing")
-        col1, col2 = st.columns(2)
-        with col1:
-            st.markdown("**Overall risk**")
-            severity_badge(briefing.get("overall_risk_level", "LOW"))
-        with col2:
-            st.caption(f"Generated: {briefing.get('timestamp')}")
+        st.markdown("**Overall risk**")
+        severity_badge(briefing.get("overall_risk_level", "LOW"))
+        st.caption(f"Generated: {briefing.get('timestamp')}")
 
         st.markdown("#### What changed")
-        st.info(briefing.get("delta_from_last") or "No delta available.")
+        delta_callout(briefing.get("delta_from_last") or "No delta available.")
 
         for section in briefing.get("sections") or []:
             guardian = section.get("guardian_verdict") or {}
+            conf = section.get("confidence", "LOW")
             with st.expander(f"📋 {section.get('topic', 'Topic')}", expanded=True):
                 col_a, col_b = st.columns(2)
                 with col_a:
-                    confidence_badge(section.get("confidence", "LOW"))
+                    confidence_badge(conf)
                 with col_b:
                     guardian_badge(bool(guardian.get("passed", False)))
                 st.markdown(section.get("analysis", ""))

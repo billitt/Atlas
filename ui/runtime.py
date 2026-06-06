@@ -30,11 +30,46 @@ AGENT_ENDPOINTS = (
 )
 
 
+@st.cache_data(ttl=10, show_spinner=False)
 def get_status() -> JsonDict:
-    """Return system health snapshot (Ollama, MCP, memory, last activity)."""
+    """Return system health snapshot (cached 10s for sidebar reruns)."""
     return _collect_status()
 
 
+@st.cache_data(ttl=15, show_spinner=False)
+def fetch_agent_cards_status() -> list[JsonDict]:
+    """Probe A2A agent card endpoints for the status page (cached 15s)."""
+    cards: list[JsonDict] = []
+    for name, url in AGENT_ENDPOINTS:
+        reachable = False
+        skills: list[str] = []
+        try:
+            with httpx.Client(timeout=2.0) as client:
+                response = client.get(f"{url.rstrip('/')}/.well-known/agent.json")
+                reachable = response.status_code == 200
+                if reachable:
+                    payload = response.json()
+                    skills = [
+                        skill.get("id", "")
+                        for skill in payload.get("skills", [])
+                        if skill.get("id")
+                    ]
+        except httpx.HTTPError:
+            pass
+        port = url.rsplit(":", 1)[-1]
+        cards.append(
+            {
+                "name": name,
+                "url": url,
+                "port": port,
+                "reachable": reachable,
+                "skills": skills,
+            }
+        )
+    return cards
+
+
+@st.cache_data(ttl=30, show_spinner=False)
 def get_ollama_vram() -> str | None:
     """Return VRAM usage string from Ollama /api/ps when available."""
     try:
@@ -104,6 +139,10 @@ def ensure_agent_runtime() -> list[JsonDict]:
     if st.session_state.get("agent_boot_error"):
         return []
 
+    if st.session_state.get("agent_boot_in_progress"):
+        return []
+
+    st.session_state.agent_boot_in_progress = True
     try:
         servers = start_agent_servers()
         st.session_state.agent_servers = servers
@@ -122,6 +161,8 @@ def ensure_agent_runtime() -> list[JsonDict]:
         st.session_state.agent_boot_error = str(exc)
         st.session_state.agent_cards = []
         return []
+    finally:
+        st.session_state.agent_boot_in_progress = False
 
 
 def get_agent_cards() -> list[JsonDict]:
@@ -129,46 +170,23 @@ def get_agent_cards() -> list[JsonDict]:
     return ensure_agent_runtime()
 
 
-def build_synthesis_stack(agent_cards: list[JsonDict]) -> tuple[Any, Any]:
-    """Build synthesis agent + episodic memory from agent cards."""
+@st.cache_resource(show_spinner=False)
+def _cached_synthesis_stack(cards_json: str) -> tuple[Any, Any]:
+    """Build synthesis agent + episodic memory once per session/card set."""
+    agent_cards: list[JsonDict] = json.loads(cards_json)
     return _build_synthesis_stack(agent_cards)
 
 
+def build_synthesis_stack(agent_cards: list[JsonDict]) -> tuple[Any, Any]:
+    """Build synthesis agent + episodic memory (cached per agent card set)."""
+    cards_json = json.dumps(agent_cards, sort_keys=True)
+    return _cached_synthesis_stack(cards_json)
+
+
+@st.cache_resource(show_spinner=False)
 def build_alert_engine() -> Any:
-    """Return AlertEngine with default rules registered."""
+    """Return AlertEngine with default rules registered (one instance per session)."""
     return _build_alert_engine()
-
-
-def fetch_agent_cards_status() -> list[JsonDict]:
-    """Probe A2A agent card endpoints for the status page."""
-    cards: list[JsonDict] = []
-    for name, url in AGENT_ENDPOINTS:
-        reachable = False
-        skills: list[str] = []
-        try:
-            with httpx.Client(timeout=2.0) as client:
-                response = client.get(f"{url.rstrip('/')}/.well-known/agent.json")
-                reachable = response.status_code == 200
-                if reachable:
-                    payload = response.json()
-                    skills = [
-                        skill.get("id", "")
-                        for skill in payload.get("skills", [])
-                        if skill.get("id")
-                    ]
-        except httpx.HTTPError:
-            pass
-        port = url.rsplit(":", 1)[-1]
-        cards.append(
-            {
-                "name": name,
-                "url": url,
-                "port": port,
-                "reachable": reachable,
-                "skills": skills,
-            }
-        )
-    return cards
 
 
 def find_run_log_by_trace_id(trace_id: str) -> Path | None:

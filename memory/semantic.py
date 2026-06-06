@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 import chromadb
+from chromadb.errors import InvalidArgumentError
 
 from services.embeddings import embed_texts
 
@@ -14,6 +15,7 @@ class SemanticMemory:
     """Persistent vector memory for documents and retrieved context."""
 
     def __init__(self, collection_name: str = "atlas", persist_dir: str = "data/chroma") -> None:
+        self._collection_name = collection_name
         self.persist_dir = Path(persist_dir)
         self.persist_dir.mkdir(parents=True, exist_ok=True)
         self.client = chromadb.PersistentClient(path=str(self.persist_dir))
@@ -40,12 +42,66 @@ class SemanticMemory:
             return
 
         embeddings = embed_texts(chunks)
-        self.collection.upsert(
-            documents=chunks,
-            metadatas=chunk_metadatas,
-            ids=chunk_ids,
-            embeddings=embeddings,
+        self._upsert_chunks(chunks, chunk_metadatas, chunk_ids, embeddings)
+
+    def _recreate_collection(self, embedding_dim: int) -> None:
+        print(
+            f"[semantic] Embedding dimension changed; recreating collection "
+            f"{self._collection_name!r} (dim={embedding_dim})."
         )
+        self.client.delete_collection(self._collection_name)
+        self.collection = self.client.get_or_create_collection(
+            name=self._collection_name,
+            metadata={"embedding_dim": str(embedding_dim)},
+        )
+
+    def _ensure_embedding_dimension(self, embedding_dim: int) -> None:
+        if self.collection.count() == 0:
+            return
+        meta = self.collection.metadata or {}
+        stored = meta.get("embedding_dim")
+        if stored is not None and int(stored) != embedding_dim:
+            self._recreate_collection(embedding_dim)
+            return
+        try:
+            peek = self.collection.peek(limit=1, include=["embeddings"])
+            embs = peek.get("embeddings") or []
+            if embs and embs[0] is not None and len(embs[0]) != embedding_dim:
+                self._recreate_collection(embedding_dim)
+        except Exception:
+            return
+
+    def _upsert_chunks(
+        self,
+        chunks: list[str],
+        chunk_metadatas: list[dict[str, Any]],
+        chunk_ids: list[str],
+        embeddings: list[list[float]],
+    ) -> None:
+        embedding_dim = len(embeddings[0]) if embeddings else 0
+        self._ensure_embedding_dimension(embedding_dim)
+        try:
+            self.collection.upsert(
+                documents=chunks,
+                metadatas=chunk_metadatas,
+                ids=chunk_ids,
+                embeddings=embeddings,
+            )
+        except InvalidArgumentError as exc:
+            if "dimension" not in str(exc).lower():
+                raise
+            self._recreate_collection(embedding_dim)
+            self.collection.upsert(
+                documents=chunks,
+                metadatas=chunk_metadatas,
+                ids=chunk_ids,
+                embeddings=embeddings,
+            )
+        if embedding_dim and not (self.collection.metadata or {}).get("embedding_dim"):
+            try:
+                self.collection.modify(metadata={"embedding_dim": str(embedding_dim)})
+            except Exception:
+                pass
 
     def query(self, text: str, n_results: int = 5) -> list[dict[str, Any]]:
         """Return nearest semantic matches as text/metadata/distance dicts."""

@@ -2,6 +2,8 @@
 
 **Atlas** is a global business intelligence system powered by autonomous AI agents that communicate via industry-standard protocols. This document is the current plan and master reference point. Nothing here is sacred except the core goal.
 
+**Status (May 2026):** Phases **0–14 are complete**. All core pipelines are implemented and demo-verified. See [README.md](README.md) for quick start and [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md) for the Taiwan Strait interview walkthrough.
+
 ---
 
 ## Core Goal
@@ -89,7 +91,7 @@ This split reflects production practice: the hot path is Rust, the reasoning lay
                     └─────────────────┘
 ```
 
----
+**As built:** Live MCP servers are `mcp-market-data` (Yahoo) and `mcp-edgar` (SEC). Geopolitical and trade data for the Taiwan demo come from seed files ingested into semantic memory; additional Rust MCP crates remain planned.
 
 ## Language Boundary
 
@@ -98,8 +100,8 @@ The Rust/Python split follows a clear rule: **Rust owns data, Python owns reason
 | Layer | Language | Why |
 |-------|----------|-----|
 | MCP servers (all data adapters) | Rust | I/O-bound, concurrent network requests, parsing, low memory footprint (5-20MB per server vs 100-200MB Python) |
-| Data ingestion pipeline | Rust | CPU-intensive chunking, tokenization, batching |
-| Embedding service | Rust | High-throughput vector generation via Ollama REST API |
+| Data ingestion | Python (`ingestion/seed_loader.py`) | Demo seed → semantic memory; full live pipeline planned |
+| Embedding service | Python (`services/embeddings.py`) | Ollama `/api/embed` for ChromaDB vectors |
 | Agent logic + reflection | Python | Rapid iteration, string manipulation, LLM interaction |
 | LangGraph orchestration | Python | Framework is Python-only, state management |
 | A2A protocol layer | Python | SDK is Python-only |
@@ -125,7 +127,8 @@ No agent passes output downstream without first critiquing its own work. The Gua
 **Market Intelligence Agent**
 
 - Domain: Financial markets — equities, commodities, forex, macro indicators
-- MCP servers: FRED, Yahoo Finance, Alpha Vantage (free tier), EDGAR
+- **As built MCP:** Yahoo Finance via `mcp-market-data` (:8001)
+- **Planned MCP:** FRED, Alpha Vantage (free tier)
 - Capabilities: Anomaly detection, trend shift identification, cross-asset correlation, technical indicator calculation
 - Reflection: Validates that claims are grounded in data, checks for stale data, confirms statistical significance before surfacing signals
 - A2A Agent Card: Advertises capabilities like `market_snapshot`, `anomaly_scan`, `correlation_check`
@@ -133,7 +136,8 @@ No agent passes output downstream without first critiquing its own work. The Gua
 **Geopolitical Risk Agent**
 
 - Domain: Conflicts, sanctions, elections, policy shifts, trade agreements
-- MCP servers: GDELT, ACLED, RSS feeds (Reuters, AP, government releases), UN/WTO
+- **As built:** Semantic memory seed data (GDELT-style Taiwan scenario) + Granite model knowledge with explicit limitation disclosure
+- **Planned MCP servers:** GDELT, ACLED, RSS feeds (Reuters, AP, government releases), UN/WTO
 - Capabilities: Event detection, entity extraction (NER), regional risk scoring, temporal trend analysis
 - Reflection: Cross-references multiple sources before assigning risk scores, flags single-source assessments, checks recency
 - A2A Agent Card: Advertises `risk_assessment`, `event_timeline`, `entity_exposure`
@@ -141,7 +145,8 @@ No agent passes output downstream without first critiquing its own work. The Gua
 **Supply Chain & Trade Agent**
 
 - Domain: Global trade flows, tariffs, shipping disruptions, commodity dependencies
-- MCP servers: UN Comtrade, WTO datasets, BIS, USITC, port/shipping open data
+- **As built:** Semantic memory seed data (simulated UN Comtrade trade flows) + Granite model knowledge with explicit limitation disclosure
+- **Planned MCP servers:** UN Comtrade, WTO datasets, BIS, USITC, port/shipping open data
 - Capabilities: Dependency graph construction, tariff impact modeling, disruption detection, chokepoint identification
 - Reflection: Validates trade flow data against multiple sources, checks for data lag, confirms causal chains before asserting disruption impact
 - A2A Agent Card: Advertises `dependency_map`, `disruption_alert`, `tariff_impact`
@@ -149,7 +154,8 @@ No agent passes output downstream without first critiquing its own work. The Gua
 **Research & Filing Agent**
 
 - Domain: SEC filings, earnings reports, annual reports, regulatory filings
-- MCP servers: SEC EDGAR, Open Corporates, government data portals
+- **As built MCP:** SEC EDGAR via `mcp-edgar` (:8002) — `company_filings`, `filing_text`, `full_text_search`
+- **Planned MCP:** Open Corporates, government data portals
 - Capabilities: Key financial extraction, sentiment analysis on forward-looking statements, filing diff detection (what changed from last quarter)
 - Reflection: Verifies extracted numbers against source documents, flags ambiguous language, checks for selective quoting
 - A2A Agent Card: Advertises `filing_summary`, `financial_extract`, `filing_diff`
@@ -177,7 +183,7 @@ No agent passes output downstream without first critiquing its own work. The Gua
 
 Agents don't just retrieve and forget. Atlas maintains three distinct memory layers:
 
-**Semantic Memory (ChromaDB)** Long-term knowledge store. All ingested documents, filings, news articles, and market data are chunked, embedded (Granite Embedding English R2), and stored as vectors. This is the RAG retrieval layer — agents query it for relevant context when answering questions or generating assessments.
+**Semantic Memory (ChromaDB)** Long-term knowledge store. Documents, filings, and seed scenario data are chunked, embedded (`granite-embedding:278m` via Ollama), and stored as vectors. Agents query semantic memory during execution for relevant context.
 
 **Episodic Memory (SQLite)** Historical record of system events. Every briefing generated, every alert fired, every agent execution and its outcome, every plan the Synthesis Agent created. This enables temporal reasoning: "What did I assess about semiconductor risk last month?" or "How has the geopolitical risk score for Taiwan changed over the past 90 days?" Episodic memory is append-only and immutable — an audit trail.
 
@@ -210,24 +216,27 @@ Output format: Structured briefing with sections ranked by risk/relevance, sourc
 
 Agents run continuous watch loops against their MCP data sources. When a threshold is crossed or a significant event is detected, an alert fires through the Synthesis Agent with an impact assessment.
 
-Example flow: Trade Agent detects new tariff announcement affecting semiconductor imports → fires A2A task to Geopolitical Agent for context → fires A2A task to Market Agent for price impact → Synthesis Agent compiles alert with full reasoning chain → alert delivered to CLI and dashboard simultaneously.
+Example flow: `AlertEngine` evaluates fresh MCP data (or demo seed context) against Granite JSON conditions → triggered alert logged to episodic memory → delivered via CLI and dashboard.
 
 ---
 
 ## Demo Scenario (The Story)
 
-The end-to-end demo walks through a single compelling scenario that exercises every agent, both protocols, all three memory tiers, and the full observability stack:
+The end-to-end demo walks through a single compelling scenario that exercises every agent, both protocols, all three memory tiers, and the full observability stack.
 
-**Trigger:** Taiwan Strait tensions spike (simulated via injected GDELT data)
+**Run:** `atlas-taiwan-demo` (or `atlas query` / dashboard Query page with the same question after seeding). Walkthrough: [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md).
 
-1. **Geopolitical Risk Agent** detects elevated conflict signals in GDELT feed via MCP → runs NER, identifies entities → self-reflects on source diversity → assigns risk score → publishes assessment via A2A
-2. **Supply Chain Agent** receives A2A task → queries UN Comtrade via MCP for semiconductor trade flow data → builds dependency graph → identifies EU/US exposure → self-reflects on data freshness → publishes via A2A
-3. **Market Intelligence Agent** receives A2A task → pulls TSMC, ASML, Intel pricing from Yahoo Finance via MCP → detects correlated movement → self-reflects on statistical significance → publishes via A2A
-4. **Research Agent** receives A2A task → pulls latest TSMC 20-F from EDGAR via MCP → extracts risk factor language about geopolitical exposure → self-reflects on selective quoting risk → publishes via A2A
-5. **Synthesis Agent** collects all outputs → resolves conflicting signals → generates structured briefing with reasoning chain → self-reflects on plan completeness
-6. **Guardian Agent** validates all claims trace to sources → assigns confidence levels → flags any unsupported assertions
-7. **Alert fires** to CLI terminal with summary and link to full briefing
-8. **Dashboard** displays full reasoning chain, source citations, agent execution graph (via OpenTelemetry traces), and confidence heat map
+**Trigger:** Taiwan Strait tensions spike (simulated via seed data in `data/seed_data/` → ChromaDB semantic memory)
+
+1. **Seed loader** ingests GDELT-style events, trade-flow data, and TSMC filing excerpt into semantic memory
+2. **Alert fires** — `taiwan_strait_tension` rule evaluates seed aggregate metrics (HIGH severity)
+3. **Geopolitical Risk Agent** queries semantic memory for GDELT-style seed context → self-reflects → publishes via A2A
+4. **Supply Chain Agent** queries semantic memory for trade-flow / chokepoint seed data → publishes via A2A
+5. **Market Intelligence Agent** pulls live TSM quote from Yahoo Finance via `mcp-market-data` MCP → publishes via A2A
+6. **Research Agent** pulls TSMC filings from EDGAR via `mcp-edgar` MCP → publishes via A2A
+7. **Synthesis Agent** collects outputs → generates unified briefing → Guardian validates with confidence levels
+8. **Scheduled briefing** runs for topic "Taiwan Strait semiconductor risk" with episodic delta
+9. **OpenTelemetry trace** links run log, CLI output, and dashboard Trace Viewer via `trace_id`
 
 An interviewer watching this demo sees: protocol-native architecture (MCP + A2A), multi-agent coordination with explicit planning, reflection at every stage, three-tier memory in action, full observability, polyglot Rust/Python design, and a real-world scenario that matters.
 
@@ -235,16 +244,33 @@ An interviewer watching this demo sees: protocol-native architecture (MCP + A2A)
 
 ## Data Sources (Open & Free)
 
-All sources are implemented as **Rust MCP servers** — standardized, pluggable, and independently testable.
+Live data adapters are **Rust MCP servers**. Geopolitical and trade data for the Taiwan demo use **seed files** ingested into semantic memory until dedicated MCP servers are built.
 
-| Category | MCP Server (Rust crate) | Sources |
-|----------|------------------------|---------|
-| Financial markets | `mcp-market-data` | Yahoo Finance, FRED, Alpha Vantage (free tier) |
-| Corporate filings | `mcp-edgar` | SEC EDGAR full-text search + filing API |
-| Geopolitical events | `mcp-geopolitical` | GDELT, ACLED, RSS feeds (Reuters, AP) |
+### Implemented
+
+| Category | MCP Server (Rust) | Port | Sources |
+|----------|-------------------|------|---------|
+| Financial markets | `mcp-market-data` | 8001 | Yahoo Finance (`get_quote`) |
+| Corporate filings | `mcp-edgar` | 8002 | SEC EDGAR submissions, filing text, full-text search |
+
+### Demo seed data (semantic memory)
+
+| File | Simulates | Used by |
+|------|-----------|---------|
+| `data/seed_data/taiwan_scenario.json` | GDELT-style conflict events | Geopolitical Agent, alerts |
+| `data/seed_data/trade_flow_data.json` | UN Comtrade trade flows | Supply Chain Agent |
+| `data/seed_data/tsmc_filing_excerpt.txt` | TSMC 20-F risk factors | Research Agent (supplement) |
+
+Loaded via `ingestion/seed_loader.py` → `load_taiwan_scenario()`.
+
+### Planned (not yet built)
+
+| Category | MCP Server | Sources |
+|----------|------------|---------|
+| Geopolitical events | `mcp-geopolitical` | GDELT, ACLED, RSS feeds |
 | Government / policy | `mcp-gov` | UN, WTO, government press releases |
-| Trade & supply chain | `mcp-trade` | UN Comtrade, WTO datasets, BIS, USITC |
-| Macro indicators | `mcp-macro` | World Bank Open Data, IMF, OECD, BLS |
+| Trade & supply chain | `mcp-trade` | UN Comtrade, WTO, BIS, USITC |
+| Macro indicators | `mcp-macro` | World Bank, IMF, OECD, BLS |
 
 All sources must be publicly accessible with no API key required, or free-tier API keys only.
 
@@ -255,13 +281,13 @@ All sources must be publicly accessible with no API key required, or free-tier A
 | Layer | Tool | Language | Role |
 |-------|------|----------|------|
 | MCP servers | reqwest, serde, tokio, axum | Rust | Data source adapters — HTTP fetching, JSON parsing, MCP protocol |
-| Data ingestion | Custom pipeline | Rust | Document chunking, tokenization, batch embedding |
-| Embedding service | Custom wrapper | Rust | Vector generation via Ollama REST API |
+| Data ingestion | `ingestion/seed_loader.py` | Python | Taiwan demo seed → ChromaDB |
+| Embedding service | `services/embeddings.py` | Python | Ollama `/api/embed` for semantic memory |
 | Agent orchestration | LangGraph | Python | DAG-based workflow coordination, state management, conditional routing, retry logic |
 | Agent construction | Custom `BaseAgent` pattern | Python | Explicit `plan -> execute -> reflect` specialist-agent loop |
 | Agent communication | A2A Protocol (v1.0) | Python | Inter-agent discovery, task delegation, structured result exchange |
 | LLM | IBM Granite 4.1 8B via Ollama | — | Apache 2.0, Q4 quantized for 6GB VRAM |
-| Embeddings | Granite Embedding English R2 | — | Vector generation for semantic memory |
+| Embeddings | `granite-embedding:278m` via Ollama | — | Vector generation for semantic memory |
 | Semantic memory | ChromaDB | Python | Vector storage and retrieval |
 | Episodic memory | SQLite (SQLModel) | Python | Briefing history, alert history, execution logs |
 | Doc processing | Docling | Python | PDF/filing parsing (feeds into Rust ingestion pipeline) |
@@ -293,155 +319,59 @@ The Streamlit dashboard includes an **execution trace view** where the user can 
 
 ---
 
-## Project Structure
+## Project Structure (As Built)
 
-```
+```text
 atlas/
-├── rust/                               ← Rust workspace (MCP servers + data layer)
-│   ├── Cargo.toml                      ← Workspace root
-│   ├── ollama-check/                   ← Ollama health check (Phase 0 Rust verification)
-│   │   ├── Cargo.toml
-│   │   └── src/main.rs
-│   ├── mcp-market-data/                ← Yahoo Finance, FRED, Alpha Vantage MCP server
-│   │   ├── Cargo.toml
-│   │   └── src/main.rs
-│   ├── mcp-edgar/                      ← SEC EDGAR MCP server
-│   │   ├── Cargo.toml
-│   │   └── src/main.rs
-│   ├── mcp-geopolitical/               ← GDELT, ACLED, RSS MCP server
-│   │   ├── Cargo.toml
-│   │   └── src/main.rs
-│   ├── mcp-trade/                      ← UN Comtrade, WTO, BIS MCP server
-│   │   ├── Cargo.toml
-│   │   └── src/main.rs
-│   ├── mcp-macro/                      ← World Bank, IMF, OECD MCP server
-│   │   ├── Cargo.toml
-│   │   └── src/main.rs
-│   └── mcp-gov/                        ← Government releases, UN/WTO docs MCP server
-│       ├── Cargo.toml
-│       └── src/main.rs
-│
-├── agents/                             ← Agent definitions (Python)
-│   ├── base.py                         ← Common agent pattern (plan → execute → reflect)
-│   ├── market/
-│   │   ├── agent.py                    ← Market Intelligence Agent
-│   │   ├── tools.py                    ← Agent-specific tool definitions
-│   │   └── agent_card.json             ← A2A capability advertisement
-│   ├── geopolitical/
-│   │   ├── agent.py
-│   │   ├── tools.py
-│   │   └── agent_card.json
-│   ├── supply_chain/
-│   │   ├── agent.py
-│   │   ├── tools.py
-│   │   └── agent_card.json
-│   ├── research/
-│   │   ├── agent.py
-│   │   ├── tools.py
-│   │   └── agent_card.json
-│   ├── synthesis/
-│   │   ├── agent.py                    ← Orchestrator with DAG planner
-│   │   ├── planner.py                  ← Explicit plan generation and evaluation
-│   │   └── agent_card.json
-│   └── guardian/
-│       ├── agent.py                    ← Second-pass validator
-│       └── agent_card.json
-│
-├── protocols/
-│   ├── a2a/                            ← A2A protocol implementation (Python)
-│   │   ├── server.py                   ← A2A HTTP/JSON-RPC server
-│   │   ├── client.py                   ← A2A client for agent-to-agent calls
-│   │   └── discovery.py                ← Agent Card registry and discovery
-│   └── mcp/                            ← MCP client utilities (Python)
-│       └── client.py                   ← Python MCP client for connecting to Rust MCP servers
-│
-├── orchestration/
-│   ├── graph.py                        ← LangGraph workflow definitions
-│   ├── state.py                        ← Shared state schemas
-│   └── router.py                       ← Query routing and plan dispatch
-│
-├── memory/
-│   ├── semantic.py                     ← ChromaDB interface (long-term knowledge)
-│   ├── episodic.py                     ← SQLite interface (historical events/logs)
-│   └── working.py                      ← Per-query scratchpad management
-│
-├── ingestion/
-│   ├── pipeline.py                     ← Python orchestration of Rust ingestion service
-│   └── schedulers.py                   ← Cron jobs for periodic data pulls
-│
-├── services/
-│   ├── llm.py                          ← Ollama / Granite wrapper
-│   └── embeddings.py                   ← Embedding service
-│
-├── observability/
-│   ├── tracing.py                      ← OpenTelemetry setup and span definitions
-│   └── exporters.py                    ← Trace export config (Jaeger, console, file)
-│
-├── ui/
-│   ├── streamlit_app.py                ← Web dashboard entry point
-│   └── pages/
-│       ├── briefings.py                ← Scheduled briefing viewer
-│       ├── query.py                    ← Natural language Q&A interface
-│       ├── alerts.py                   ← Real-time alert feed
-│       ├── agent_status.py             ← Agent health and capability view
-│       └── trace_viewer.py             ← Execution trace and reasoning chain explorer
-│
-├── cli/
-│   └── main.py                         ← Typer CLI for queries, alerts, status
-│
+├── rust/                    ← Rust workspace: ollama-check, mcp-market-data, mcp-edgar
+├── agents/                  ← Specialist agents + Agent Cards (market, geopolitical, supply_chain, research, synthesis, guardian)
+├── protocols/               ← MCP client + A2A server/client/discovery
+├── orchestration/           ← LangGraph graph.py, state.py
+├── memory/                  ← semantic.py, episodic.py, working.py
+├── ingestion/               ← seed_loader.py (Taiwan scenario → ChromaDB)
+├── services/                ← llm, embeddings, briefing, alerts, scheduler
+├── observability/           ← tracing, exporters, trace_reader, run_logger
+├── cli/                     ← Typer CLI (`atlas`)
+├── ui/                      ← Streamlit dashboard (`atlas-dashboard`)
+├── examples/                ← Demos: taiwan_demo, synthesis, briefing, alerts, tracing, _demo_infra
 ├── data/
-│   ├── sample_scenarios/               ← Demo scenario data (Taiwan Strait, etc.)
-│   └── seed_data/                      ← Initial knowledge base seeding
-│
-├── docs/
-│   ├── DEVLOG.md                       ← Step-by-step dev log + ADRs
-│   ├── ARCHITECTURE.md                 ← System design, protocol decisions, language boundary
-│   ├── AGENTS.md                       ← Agent specs, reflection patterns, Agent Cards
-│   ├── PROTOCOLS.md                    ← MCP + A2A implementation details
-│   ├── DATA_SOURCES.md                 ← Source documentation and schemas
-│   ├── MEMORY.md                       ← Three-tier memory architecture
-│   └── DEMO_SCRIPT.md                  ← Step-by-step demo walkthrough
-│
+│   ├── seed_data/           ← Taiwan Strait demo seed files
+│   └── sample_scenarios/    ← Expected demo output reference
+├── docs/                    ← ARCHITECTURE, AGENTS, PROTOCOLS, MEMORY, DATA_SOURCES, DEMO_SCRIPT, VERIFICATION, DEVLOG
 ├── tests/
-│   ├── agents/                         ← Per-agent unit tests (Python)
-│   ├── protocols/                      ← MCP server and A2A protocol tests
-│   ├── memory/                         ← Memory tier tests
-│   └── integration/                    ← End-to-end scenario tests
-│
-├── examples/                           ← Phase 0 hello world scripts (Python)
-│   ├── langgraph_hello.py
-│   └── beeai_hello.py
-│
-├── scripts/                            ← Utility scripts (Python)
-│   └── verify_ollama.py
-│
-├── compose.yml                         ← Local multi-service setup (Rust + Python)
-├── pyproject.toml                      ← Python project config
+├── scripts/
+├── pyproject.toml
 ├── .env.example
-└── README.md
+├── README.md
+└── CLAUDE.md
 ```
+
+**Planned but not built:** additional Rust MCP crates (`mcp-geopolitical`, `mcp-trade`, `mcp-macro`, `mcp-gov`), full live ingestion pipeline, `compose.yml`.
 
 ---
 
 ## Build Phases
 
-| Phase | Focus | Outcome | Key Decisions |
-|-------|-------|---------|---------------|
-| 0 | Environment setup | Ollama + Granite running, LangGraph + BeeAI hello worlds verified, Rust toolchain installed, project scaffolded, Rust Ollama health check binary working | ADR: LangGraph orchestration; BeeAI evaluated then deferred for explicit BaseAgent loop; ADR: Hybrid Rust/Python architecture |
-| 1 | MCP foundation | First MCP server (Yahoo Finance) operational **in Rust**, returns structured data, Python agent can connect as MCP client | ADR: MCP server implementation pattern (Rust) |
-| 2 | Single agent PoC | Market Intelligence Agent (Python) can ingest via Rust MCP server, embed to ChromaDB, answer queries with self-reflection | ADR: Reflection loop depth and retry limits |
-| 3 | A2A protocol layer | A2A server running, Agent Cards published, two agents can discover and delegate tasks | ADR: A2A transport choice (HTTP vs gRPC) |
-| 4 | Multi-agent coordination | Add Geopolitical + Supply Chain agents, Synthesis Agent routes between them via A2A with explicit plan objects | ADR: Plan object schema |
-| 5 | Memory architecture | Three-tier memory operational — semantic (ChromaDB), episodic (SQLite), working (in-context) | ADR: Episodic memory schema design |
-| 6 | Research & Filing Agent | SEC EDGAR Rust MCP server, document processing pipeline, filing diff detection | |
-| 7 | Guardian Agent | Second-pass validation, confidence scoring, hallucination detection against source data | ADR: Confidence threshold calibration |
-| 8 | Scheduled briefings | APScheduler cron jobs, briefing templates, episodic memory logging | |
-| 9 | Real-time alerts | Watch loops on MCP servers, threshold detection, multi-agent alert assembly | |
-| 10 | Observability | Full OpenTelemetry tracing across all agents, plans, and protocol calls | ADR: Trace storage and retention |
-| 11 | CLI interface | Typer-based terminal Q&A, alert stream, agent status | |
-| 12 | Web dashboard | Streamlit UI — briefings, Q&A, alerts, agent status, trace viewer | |
-| 13 | Demo scenario | Taiwan Strait scenario fully wired, seed data loaded, demo script written | |
-| 14 | Polish & presentation | README, documentation, code cleanup, commit history, walkthrough rehearsal | |
+All phases **0–14 are complete** (May 2026).
+
+| Phase | Status | Focus | Outcome | Key Decisions |
+|-------|--------|-------|---------|---------------|
+| 0 | ✅ | Environment setup | Ollama + Granite, LangGraph + BeeAI hello worlds, Rust toolchain, `ollama-check` | ADR-001: LangGraph; BaseAgent over BeeAI; hybrid Rust/Python |
+| 1A | ✅ | Rust Ollama check | `ollama-check` binary verifies local Granite | |
+| 1B | ✅ | MCP foundation | `mcp-market-data` (Yahoo Finance) on :8001, Python MCP client | ADR: MCP server pattern (Rust) |
+| 2 | ✅ | Single agent PoC | Market Agent: MCP → analyze → reflect | ADR-002: Reflection loop depth |
+| 3 | ✅ | A2A protocol | Agent Cards, HTTP JSON-RPC delegation | ADR-003: A2A transport |
+| 4 | ✅ | Multi-agent coordination | Synthesis + LangGraph + Geopolitical + Supply Chain | ADR-004: Plan object schema |
+| 5 | ✅ | Memory architecture | ChromaDB + SQLite + working memory | ADR-005: Episodic schema |
+| 6 | ✅ | Research & Filing Agent | `mcp-edgar` on :8002, Research Agent | |
+| 7 | ✅ | Guardian Agent | In-graph validation, confidence scoring | ADR-007: Guardian separation |
+| 8 | ✅ | Scheduled briefings | `BriefingEngine`, APScheduler, briefing templates | |
+| 9 | ✅ | Real-time alerts | `AlertEngine`, `AlertWatcher`, episodic alert records | |
+| 10 | ✅ | Observability | OpenTelemetry tracing, trace viewer, `trace_id` in run logs | ADR-010: Trace storage |
+| 11 | ✅ | CLI | Typer `atlas` command (query, briefing, alerts, status, traces) | |
+| 12 | ✅ | Web dashboard | Streamlit `atlas-dashboard` (5 pages) | |
+| 13 | ✅ | Demo scenario | Taiwan Strait end-to-end: seed data, `atlas-taiwan-demo`, DEMO_SCRIPT | |
+| 14 | ✅ | Polish & presentation | Docs set, README, ruff/clippy cleanup, VERIFICATION checklist | ADR-011: Doc structure |
 
 Phases are sequential by default but can be reordered if priorities shift. Each phase produces something runnable and testable — no big-bang integration at the end.
 

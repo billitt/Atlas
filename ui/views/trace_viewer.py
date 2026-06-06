@@ -1,4 +1,4 @@
-"""Execution trace explorer page."""
+"""Execution trace explorer view."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from pathlib import Path
 import streamlit as st
 
 from observability.trace_reader import format_trace_tree, list_traces, load_trace
-from ui.components import render_span_tree
+from ui.components import render_trace_tree_html
 from ui.runtime import find_run_log_by_trace_id
 
 
@@ -44,7 +44,8 @@ def render() -> None:
         query = _query_from_trace_path(str(entry["path"]))
         trace_ids = ", ".join(entry.get("trace_ids") or []) or "unknown"
         labels.append(
-            f"{entry.get('exported_at') or entry.get('filename')} | {trace_ids} | {query or '(no query)'}"
+            f"{entry.get('exported_at') or entry.get('filename')} | {trace_ids} | "
+            f"{query or '(no query)'}"
         )
 
     selected = st.selectbox("Recent traces", range(len(entries)), format_func=lambda i: labels[i])
@@ -64,16 +65,17 @@ def render() -> None:
         return
 
     trace = load_trace(str(entry["path"]))
-    tree_text = format_trace_tree(trace, trace_id=trace_id)
-    st.code(tree_text, language="text")
-
-    st.subheader("Span tree")
     trees = trace.get("trees") or {}
     nodes = trees.get(trace_id) or []
+
+    st.subheader("Span tree")
     if nodes:
-        render_span_tree(nodes)
+        render_trace_tree_html(nodes)
     else:
         st.caption("No span tree for this trace id.")
+
+    with st.expander("Plain-text tree"):
+        st.code(format_trace_tree(trace, trace_id=trace_id), language="text")
 
     run_log = find_run_log_by_trace_id(trace_id)
     if run_log:

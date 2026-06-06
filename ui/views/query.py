@@ -1,4 +1,4 @@
-"""Natural language Q&A page."""
+"""Natural language Q&A view."""
 
 from __future__ import annotations
 
@@ -80,12 +80,21 @@ def render() -> None:
                 "duration_seconds": duration_seconds,
             }
 
-        with st.spinner("Agents working..."):
+        with st.status("Running Atlas pipeline...", expanded=True) as status:
+            status.write("Planning execution DAG...")
+            status.write("Delegating to specialist agents via A2A...")
+            status.write("Synthesizing unified briefing...")
+            status.write("Guardian validating claims...")
             try:
                 result = asyncio.run(_run_pipeline())
             except Exception as exc:
+                status.update(label="Analysis failed", state="error")
                 st.error(f"Analysis failed: {exc}")
                 return
+            status.update(
+                label=f"Complete in {result['duration_seconds']}s",
+                state="complete",
+            )
 
         st.session_state.last_query_result = result
         st.success(f"Analysis complete in {result['duration_seconds']}s")
@@ -98,39 +107,52 @@ def render() -> None:
 
     briefing = result["briefing"]
     trace_id = result.get("trace_id")
+    guardian = briefing.get("guardian_verdict") or {}
 
-    col1, col2 = st.columns(2)
+    col1, col2, col3 = st.columns(3)
     with col1:
-        st.subheader("Confidence")
+        st.caption("Confidence")
         confidence_badge(briefing.get("overall_confidence", "LOW"))
     with col2:
-        st.subheader("Guardian")
-        guardian = briefing.get("guardian_verdict") or {}
+        st.caption("Guardian")
         guardian_badge(bool(guardian.get("passed", False)))
+    with col3:
+        if trace_id:
+            st.caption("Trace")
+            st.code(trace_id, language=None)
 
-    with st.expander("Combined analysis", expanded=True):
+    tab_analysis, tab_guardian, tab_sources, tab_trace = st.tabs(
+        ["Analysis", "Guardian", "Sources", "Trace"]
+    )
+
+    with tab_analysis:
         st.markdown(briefing.get("combined_analysis", ""))
+        per_agent = briefing.get("agent_results") or []
+        if per_agent:
+            st.subheader("Per-agent contributions")
+            for entry in per_agent:
+                agent_name = entry.get("agent") or entry.get("name") or "agent"
+                with st.expander(str(agent_name)):
+                    artifact = entry.get("artifact", {})
+                    metadata = artifact.get("metadata", {})
+                    st.markdown(metadata.get("analysis") or artifact.get("text") or str(entry))
 
-    with st.expander("Guardian verdict"):
+    with tab_guardian:
         st.json(guardian)
         flags = guardian.get("flags") or []
         if flags:
             st.warning("Flags: " + "; ".join(flags))
+        for check in guardian.get("claim_checks") or []:
+            st.markdown(f"- **{check.get('claim', '')[:120]}** — {check.get('confidence', '')}")
 
-    per_agent = briefing.get("agent_results") or []
-    with st.expander("Per-agent contributions"):
-        for entry in per_agent:
-            agent_name = entry.get("agent") or entry.get("name") or "agent"
-            with st.expander(str(agent_name)):
-                artifact = entry.get("artifact", {})
-                metadata = artifact.get("metadata", {})
-                st.markdown(metadata.get("analysis") or artifact.get("text") or str(entry))
-
-    with st.expander("Sources"):
+    with tab_sources:
         source_list(briefing.get("per_agent_sources") or {})
 
-    if trace_id:
-        if st.button("Open in Trace Viewer"):
-            st.session_state.trace_viewer_id = trace_id
-            st.rerun()
-        st.caption(f"trace_id: `{trace_id}`")
+    with tab_trace:
+        if trace_id:
+            st.caption(f"trace_id: `{trace_id}`")
+            if st.button("Open in Trace Viewer", key="query_open_trace"):
+                st.session_state.trace_viewer_id = trace_id
+                st.rerun()
+        else:
+            st.info("No trace_id recorded for this run. Set OTEL_EXPORT_TO=file before querying.")
