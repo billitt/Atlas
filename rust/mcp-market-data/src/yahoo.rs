@@ -219,3 +219,60 @@ pub fn quote_to_text(quote: &Quote) -> String {
         .to_string()
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn chart_results_errors_when_result_missing() {
+        let chart: ChartResponse =
+            serde_json::from_str(r#"{"chart":{"result":null}}"#).expect("valid chart json");
+        let err = chart_results(chart, "AAPL").unwrap_err();
+        assert!(err.contains("no market data"));
+    }
+
+    #[test]
+    fn chart_results_errors_when_result_empty() {
+        let chart: ChartResponse =
+            serde_json::from_str(r#"{"chart":{"result":[]}}"#).expect("valid chart json");
+        let err = chart_results(chart, "AAPL").unwrap_err();
+        assert!(err.contains("no market data"));
+    }
+
+    #[test]
+    fn chart_results_surfaces_yahoo_error_payload() {
+        let chart: ChartResponse = serde_json::from_str(
+            r#"{"chart":{"result":null,"error":{"code":"Not Found","description":"Invalid symbol"}}}"#,
+        )
+        .expect("valid chart json");
+        let err = chart_results(chart, "BAD").unwrap_err();
+        assert!(err.contains("Yahoo Finance error"));
+        assert!(err.contains("Invalid symbol"));
+    }
+
+    #[test]
+    fn meta_missing_regular_market_price_is_detected() {
+        let chart: ChartResponse = serde_json::from_str(
+            r#"{
+                "chart": {
+                    "result": [{
+                        "meta": {
+                            "symbol": "AAPL",
+                            "currency": "USD",
+                            "previousClose": 180.0
+                        }
+                    }]
+                }
+            }"#,
+        )
+        .expect("valid chart json");
+        let results = chart_results(chart, "AAPL").expect("chart has result");
+        let meta = &results[0].meta;
+        let price_err = meta
+            .regular_market_price
+            .ok_or_else(|| format!("missing regularMarketPrice for 'AAPL'"));
+        assert!(price_err.is_err());
+        assert!(price_err.unwrap_err().contains("missing regularMarketPrice"));
+    }
+}

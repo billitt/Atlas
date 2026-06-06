@@ -140,4 +140,98 @@ mod tests {
     fn rejects_invalid_accession() {
         assert!(validate_accession_number("not-an-accession").is_err());
     }
+
+    #[test]
+    fn rejects_sql_injection_in_symbol() {
+        assert!(validate_symbol("'; DROP TABLE--").is_err());
+        assert!(validate_symbol("AAPL; DELETE FROM quotes").is_err());
+    }
+
+    #[test]
+    fn rejects_symbol_attack_patterns() {
+        for bad in [
+            "../../etc",
+            "%2e%2e/",
+            "TSM©",
+            "ABCDEFGHIJKLM",
+            "   ",
+            "AAPL/MSFT",
+            "AAPL\nTSM",
+        ] {
+            assert!(validate_symbol(bad).is_err(), "expected reject for {bad:?}");
+        }
+    }
+
+    #[test]
+    fn rejects_ticker_attack_patterns() {
+        for bad in [
+            "'; DROP TABLE--",
+            "../../etc",
+            "ABCDEFGHIJK",
+            "TSM©",
+            "",
+        ] {
+            assert!(validate_ticker(bad).is_err(), "expected reject for {bad:?}");
+        }
+    }
+
+    #[test]
+    fn rejects_invalid_cik_values() {
+        for bad in ["abc", "12345678901", "-1", "32o193", ""] {
+            assert!(validate_cik(bad).is_err(), "expected reject for {bad:?}");
+        }
+    }
+
+    #[test]
+    fn rejects_invalid_accession_formats() {
+        for bad in [
+            "0000320193-23",
+            "0000320193-23-000106-extra",
+            "not-an-accession",
+            "",
+        ] {
+            assert!(
+                validate_accession_number(bad).is_err(),
+                "expected reject for {bad:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn rejects_invalid_search_queries() {
+        assert!(validate_search_query("").is_err());
+        assert!(validate_search_query(&"a".repeat(501)).is_err());
+        assert!(validate_search_query("semiconductor 🔥").is_err());
+    }
+
+    #[test]
+    fn accepts_ascii_search_query() {
+        assert_eq!(
+            validate_search_query("  export restriction  ").unwrap(),
+            "export restriction"
+        );
+    }
+
+    #[test]
+    fn rejects_invalid_form_types() {
+        assert!(validate_form_type("").is_err());
+        assert!(validate_form_type("10-K; DROP").is_err());
+    }
+
+    #[test]
+    fn accepts_valid_form_type() {
+        assert_eq!(validate_form_type("10-k").unwrap(), "10-K");
+    }
+
+    #[test]
+    fn rejects_invalid_date_from_values() {
+        assert!(validate_date_from("").is_err());
+        assert!(validate_date_from("2024/01/15").is_err());
+        assert!(validate_date_from("not-a-date").is_err());
+    }
+
+    #[test]
+    fn accepts_valid_date_from() {
+        assert_eq!(validate_date_from("2024-01-15").unwrap(), "2024-01-15");
+    }
 }
