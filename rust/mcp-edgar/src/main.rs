@@ -11,9 +11,9 @@ use axum::{
     Json, Router,
 };
 use mcp::{handle_json_rpc, JsonRpcRequest};
+use mcp_common::{apply_security_layers, bind_addr, listen_scheme, tls_config};
 use serde_json::json;
 use std::net::SocketAddr;
-use tower_http::cors::{Any, CorsLayer};
 
 const DEFAULT_PORT: u16 = 8002;
 pub const SEC_USER_AGENT: &str = "Atlas-MCP/0.1 (atlas-project@example.com)";
@@ -38,27 +38,37 @@ async fn main() {
             .expect("failed to build SEC HTTP client"),
     };
 
-    let cors = CorsLayer::new()
-        .allow_origin(Any)
-        .allow_methods(Any)
-        .allow_headers(Any);
+    let app = apply_security_layers(
+        Router::new()
+            .route("/health", get(health))
+            .route("/mcp", post(mcp_endpoint))
+            .with_state(state),
+    );
 
-    let app = Router::new()
-        .route("/health", get(health))
-        .route("/mcp", post(mcp_endpoint))
-        .layer(cors)
-        .with_state(state);
-
-    let addr = SocketAddr::from(([0, 0, 0, 0], port));
-    let listener = tokio::net::TcpListener::bind(addr)
-        .await
-        .unwrap_or_else(|e| panic!("cannot bind to {addr}: {e}"));
-
-    println!("mcp-edgar listening on http://{addr}");
+    let addr = bind_addr(port);
+    let scheme = listen_scheme();
+    println!("mcp-edgar");
+    println!("  {scheme}://{addr}");
     println!("  GET  /health — liveness");
     println!("  POST /mcp    — JSON-RPC 2.0 (initialize, tools/list, tools/call)");
 
-    axum::serve(listener, app).await.expect("server error");
+    if let Some(tls) = tls_config().await {
+        axum_server::bind_rustls(addr, tls)
+            .serve(app.into_make_service_with_connect_info::<SocketAddr>())
+            .await
+            .expect("server error");
+        return;
+    }
+
+    let listener = tokio::net::TcpListener::bind(addr)
+        .await
+        .unwrap_or_else(|e| panic!("cannot bind to {addr}: {e}"));
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .await
+    .expect("server error");
 }
 
 async fn health() -> Json<serde_json::Value> {

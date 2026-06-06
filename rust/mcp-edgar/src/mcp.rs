@@ -4,6 +4,11 @@ use axum::Json;
 use serde::Deserialize;
 use serde_json::{json, Value};
 
+use mcp_common::validation::{
+    validate_accession_number, validate_cik, validate_date_from, validate_form_type,
+    validate_search_query, validate_ticker,
+};
+
 use crate::edgar::{company_filings, filing_text, full_text_search};
 use crate::AppState;
 
@@ -119,24 +124,52 @@ async fn handle_tools_call(
 
     let result = match params.name.as_str() {
         "company_filings" => {
-            let ticker = args.get("ticker").and_then(Value::as_str);
-            let cik = args.get("cik").and_then(Value::as_str);
-            company_filings(&state.http, ticker, cik)
-                .await
-                .map(|filings| json!({ "filings": filings }))
+            let ticker = match args.get("ticker").and_then(Value::as_str) {
+                Some(value) => Some(validate_ticker(value).map_err(|message| (-32602, message))?),
+                None => None,
+            };
+            let cik = match args.get("cik").and_then(Value::as_str) {
+                Some(value) => Some(validate_cik(value).map_err(|message| (-32602, message))?),
+                None => None,
+            };
+            if ticker.is_none() && cik.is_none() {
+                return Err((-32602, "company_filings requires ticker or cik".into()));
+            }
+            company_filings(
+                &state.http,
+                ticker.as_deref(),
+                cik.as_deref(),
+            )
+            .await
+            .map(|filings| json!({ "filings": filings }))
         }
         "filing_text" => {
-            let accession = required_str(&args, "accession_number")?;
-            let cik = required_str(&args, "cik")?;
-            filing_text(&state.http, cik, accession)
+            let accession = validate_accession_number(required_str(&args, "accession_number")?)
+                .map_err(|message| (-32602, message))?;
+            let cik = validate_cik(required_str(&args, "cik")?)
+                .map_err(|message| (-32602, message))?;
+            filing_text(&state.http, &cik, &accession)
                 .await
                 .map(|text| json!({ "cik": cik, "accession_number": accession, "text": text }))
         }
         "full_text_search" => {
-            let query = required_str(&args, "query")?;
-            let form_type = args.get("form_type").and_then(Value::as_str);
-            let date_from = args.get("date_from").and_then(Value::as_str);
-            full_text_search(&state.http, query, form_type, date_from).await
+            let query = validate_search_query(required_str(&args, "query")?)
+                .map_err(|message| (-32602, message))?;
+            let form_type = match args.get("form_type").and_then(Value::as_str) {
+                Some(value) => Some(validate_form_type(value).map_err(|message| (-32602, message))?),
+                None => None,
+            };
+            let date_from = match args.get("date_from").and_then(Value::as_str) {
+                Some(value) => Some(validate_date_from(value).map_err(|message| (-32602, message))?),
+                None => None,
+            };
+            full_text_search(
+                &state.http,
+                &query,
+                form_type.as_deref(),
+                date_from.as_deref(),
+            )
+            .await
         }
         other => Err(format!("unknown tool: {other}")),
     };

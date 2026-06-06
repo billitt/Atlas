@@ -4,6 +4,8 @@ use axum::Json;
 use serde::Deserialize;
 use serde_json::{json, Value};
 
+use mcp_common::validation::validate_symbol;
+
 use crate::yahoo::{fetch_quote, quote_to_text};
 use crate::AppState;
 
@@ -102,21 +104,20 @@ async fn handle_tools_call(
         return Err((-32602, format!("unknown tool: {}", params.name)));
     }
 
-    let symbol = params
+    let raw_symbol = params
         .arguments
         .as_ref()
         .and_then(|v| v.get("symbol"))
         .and_then(|v| v.as_str())
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
         .ok_or_else(|| {
             (
                 -32602,
                 "get_quote requires arguments.symbol (non-empty string)".into(),
             )
         })?;
+    let symbol = validate_symbol(raw_symbol).map_err(|message| (-32602, message))?;
 
-    match fetch_quote(&state.http, symbol).await {
+    match fetch_quote(&state.http, &symbol).await {
         Ok(quote) => Ok(json!({
             "content": [
                 {

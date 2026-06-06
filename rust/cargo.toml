@@ -1,3 +1,3 @@
 [workspace]
 resolver = "2"
-members = ["ollama-check", "mcp-market-data", "mcp-edgar"]
+members = ["ollama-check", "mcp-common", "mcp-market-data", "mcp-edgar"]
