@@ -12,6 +12,7 @@ from agents.market.agent import DEFAULT_MCP_URL, MarketIntelligenceAgent
 from agents.research.agent import DEFAULT_EDGAR_MCP_URL, ResearchFilingAgent
 from agents.supply_chain.agent import SupplyChainAgent
 from protocols.a2a.server import A2AServer
+from protocols.auth import a2a_auth_token, auth_headers, mcp_auth_token
 from protocols.mcp.client import McpClient
 
 DEFAULT_MCP_URLS = (DEFAULT_MCP_URL, DEFAULT_EDGAR_MCP_URL)
@@ -31,7 +32,10 @@ async def start_mcp_check(
     """Verify Rust MCP servers respond on GET /health before starting agents."""
     pending = set(urls or DEFAULT_MCP_URLS)
     deadline = asyncio.get_running_loop().time() + timeout_seconds
-    async with httpx.AsyncClient(timeout=1.0) as client:
+    async with httpx.AsyncClient(
+        timeout=1.0,
+        headers=auth_headers(mcp_auth_token()),
+    ) as client:
         while pending and asyncio.get_running_loop().time() < deadline:
             for url in list(pending):
                 try:
@@ -57,7 +61,10 @@ async def wait_for_agent_cards(
     """Poll A2A agent card endpoints until all servers respond."""
     pending = set(urls or DEFAULT_AGENT_CARD_URLS)
     deadline = asyncio.get_running_loop().time() + timeout_seconds
-    async with httpx.AsyncClient(timeout=1.0) as client:
+    async with httpx.AsyncClient(
+        timeout=1.0,
+        headers=auth_headers(a2a_auth_token()),
+    ) as client:
         while pending and asyncio.get_running_loop().time() < deadline:
             for url in list(pending):
                 try:

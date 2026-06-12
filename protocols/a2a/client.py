@@ -8,6 +8,7 @@ from typing import Any
 import httpx
 
 from observability.tracing import get_tracer
+from protocols.auth import a2a_auth_token, auth_headers, tls_verify_enabled
 
 JsonDict = dict[str, Any]
 _tracer = get_tracer("protocols.a2a")
@@ -16,13 +17,28 @@ _tracer = get_tracer("protocols.a2a")
 class A2AClient:
     """Small HTTP/JSON-RPC client for Atlas A2A agents."""
 
-    def __init__(self, *, timeout: float = 180.0) -> None:
+    def __init__(
+        self,
+        *,
+        timeout: float = 180.0,
+        auth_token: str | None = None,
+        verify_tls: bool | None = None,
+    ) -> None:
         self.timeout = timeout
+        self._auth_token = auth_token if auth_token is not None else a2a_auth_token()
+        self._verify_tls = tls_verify_enabled() if verify_tls is None else verify_tls
         self._next_id = 0
+
+    def _http_client(self) -> httpx.AsyncClient:
+        return httpx.AsyncClient(
+            timeout=self.timeout,
+            verify=self._verify_tls,
+            headers=auth_headers(self._auth_token),
+        )
 
     async def discover(self, url: str) -> JsonDict:
         """Fetch an Agent Card from `/.well-known/agent.json`."""
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
+        async with self._http_client() as client:
             response = await client.get(f"{url.rstrip('/')}/.well-known/agent.json")
             response.raise_for_status()
             card = response.json()
@@ -70,7 +86,7 @@ class A2AClient:
             "method": method,
             "params": params,
         }
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
+        async with self._http_client() as client:
             response = await client.post(f"{url.rstrip('/')}/a2a", json=payload)
             response.raise_for_status()
             body = response.json()

@@ -18,6 +18,7 @@ from examples._demo_infra import (
     wait_for_agent_cards,
 )
 from protocols.a2a.discovery import load_cards
+from protocols.auth import a2a_auth_token, auth_headers
 from services.llm import OLLAMA_BASE_URL
 
 JsonDict = dict[str, Any]
@@ -44,7 +45,7 @@ def fetch_agent_cards_status() -> list[JsonDict]:
         reachable = False
         skills: list[str] = []
         try:
-            with httpx.Client(timeout=2.0) as client:
+            with httpx.Client(timeout=2.0, headers=auth_headers(a2a_auth_token())) as client:
                 response = client.get(f"{url.rstrip('/')}/.well-known/agent.json")
                 reachable = response.status_code == 200
                 if reachable:

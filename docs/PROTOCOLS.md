@@ -72,6 +72,22 @@ Returns text content block with price, change %, volume vs 5-day average.
 
 SEC compliance: every request includes `User-Agent: Atlas-MCP/0.1 (...)` and 125 ms delay between calls.
 
+### Security (Phase 15)
+
+Shared middleware in `rust/mcp-common/`:
+
+| Control | Env var | Default |
+|---------|---------|---------|
+| Bind address | `ATLAS_BIND_HOST` | `127.0.0.1` |
+| Bearer auth | `ATLAS_MCP_AUTH_TOKEN` | disabled |
+| Rate limit | `ATLAS_RATE_LIMIT_RPS` | disabled |
+| CORS | `ATLAS_CORS_ORIGINS` | localhost origins |
+| TLS | `ATLAS_TLS_CERT`, `ATLAS_TLS_KEY` | plain HTTP |
+
+Python `McpClient` reads `ATLAS_MCP_AUTH_TOKEN` and sends `Authorization: Bearer …` automatically. Input validation rejects malformed symbols, tickers, CIKs, and accession numbers before upstream calls.
+
+See [SECURITY.md](SECURITY.md) for the full matrix.
+
 ### Error handling
 
 JSON-RPC errors use standard codes (`-32600` invalid request, `-32601` method not found, `-32602` invalid params). Tool failures return `isError: true` in MCP content.
@@ -108,6 +124,8 @@ result = client.send_task("http://localhost:9001", "Analyze TSM exposure...")
 ```
 
 `send_task` is traced (`a2a.send_task` spans).
+
+When `ATLAS_A2A_AUTH_TOKEN` is set, both `discover` and `send_task` attach bearer headers. `A2AServer` rejects unauthorized requests on agent card and `/a2a` endpoints.
 
 ### Server
 
@@ -169,6 +187,7 @@ Future production could add gRPC or message queues without changing agent logic 
 
 ## Related Docs
 
+- [SECURITY.md](SECURITY.md) — production hardening and network exposure
 - [ARCHITECTURE.md](ARCHITECTURE.md) — language boundary and workflows
 - [DATA_SOURCES.md](DATA_SOURCES.md) — MCP server details and rate limits
 - [AGENTS.md](AGENTS.md) — which agents use which protocols

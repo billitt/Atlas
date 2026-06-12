@@ -132,6 +132,7 @@ OpenTelemetry spans cover graph nodes, agent phases, LLM calls, MCP tool calls, 
 
 ## Related Docs
 
+- [SECURITY.md](SECURITY.md) — production hardening and network exposure
 - [AGENTS.md](AGENTS.md) — specialist agent reference
 - [PROTOCOLS.md](PROTOCOLS.md) — MCP and A2A implementation
 - [MEMORY.md](MEMORY.md) — three-tier memory

@@ -29,6 +29,8 @@ Ollama must be running.
 | `cd rust && cargo check --all` | Finished successfully |
 | `cd rust && cargo clippy --all -- -W clippy::all` | Finished, no warnings |
 | `cd rust && cargo fmt --all -- --check` | No diff (or run `cargo fmt --all`) |
+| `cd rust && cargo test -p mcp-common -p mcp-market-data` | All unit tests passed |
+| `pytest tests/ -q` | All boundary tests passed (no Ollama/MCP required) |
 
 ### Import smoke tests
 
@@ -109,6 +111,25 @@ Expected shapes: [../data/sample_scenarios/taiwan_demo_expected_output.md](../da
 
 ---
 
+## Security Smoke Tests (Phase 15)
+
+With MCP servers running (`cargo run -p mcp-market-data`, `cargo run -p mcp-edgar`):
+
+| Check | Command / action | Expected |
+|-------|------------------|----------|
+| Localhost bind | `netstat -an \| findstr "8001 8002"` | `LISTENING` on `127.0.0.1:8001` and `127.0.0.1:8002` |
+| Default auth off | `curl http://127.0.0.1:8001/health` | `{"status":"ok"}` |
+| Auth enabled | Set `ATLAS_MCP_AUTH_TOKEN=test` and restart MCP; `curl` without header | HTTP 401 |
+| Auth client | Same env; `McpClient` with matching token in `.env` | `initialize()` succeeds |
+| Invalid symbol | MCP `get_quote` with `../../etc` | JSON-RPC error, no Yahoo call |
+| Rate limit | Set `ATLAS_RATE_LIMIT_RPS=2`; burst >2 requests/sec | HTTP 429 |
+| Rust unit tests | `cd rust && cargo test -p mcp-common` | 6 tests passed |
+| Streamlit bind | `streamlit run ui/streamlit_app.py`; check netstat | `127.0.0.1:8501` only |
+
+See [SECURITY.md](SECURITY.md) for configuration details.
+
+---
+
 ## Known Limitations
 
 | Limitation | Detail |
@@ -150,3 +171,4 @@ Phase-titled commits (`Phase N: ...`) tell the implementation story from Phase 0
 | [DATA_SOURCES.md](DATA_SOURCES.md) | MCP servers and seed data |
 | [DEMO_SCRIPT.md](DEMO_SCRIPT.md) | Interview walkthrough |
 | [DEVLOG.md](DEVLOG.md) | Phase history and ADRs |
+| [SECURITY.md](SECURITY.md) | Production hardening |

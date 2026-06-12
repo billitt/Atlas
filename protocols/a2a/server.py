@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from agents.base import BaseAgent
+from protocols.auth import a2a_auth_token, bearer_authorized
 
 JsonDict = dict[str, Any]
 
@@ -90,6 +91,15 @@ class A2AServer:
 
             def do_GET(self) -> None:  # noqa: N802 - stdlib handler method name
                 if self.path == "/.well-known/agent.json":
+                    if not bearer_authorized(
+                        self.headers.get("Authorization"),
+                        a2a_auth_token(),
+                    ):
+                        self._send_json(
+                            {"error": "unauthorized"},
+                            status=HTTPStatus.UNAUTHORIZED,
+                        )
+                        return
                     self._send_json(server.agent_card)
                     return
                 self._send_json({"error": "not found"}, status=HTTPStatus.NOT_FOUND)
@@ -97,6 +107,16 @@ class A2AServer:
             def do_POST(self) -> None:  # noqa: N802 - stdlib handler method name
                 if self.path != "/a2a":
                     self._send_json({"error": "not found"}, status=HTTPStatus.NOT_FOUND)
+                    return
+
+                if not bearer_authorized(
+                    self.headers.get("Authorization"),
+                    a2a_auth_token(),
+                ):
+                    self._send_json(
+                        {"error": "unauthorized"},
+                        status=HTTPStatus.UNAUTHORIZED,
+                    )
                     return
 
                 try:

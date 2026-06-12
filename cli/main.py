@@ -26,6 +26,7 @@ from cli.formatters import (
     format_status,
     format_trace_tree,
 )
+from protocols.auth import auth_headers, mcp_auth_token
 from examples._demo_infra import (
     DEFAULT_AGENT_CARD_URLS,
     start_agent_servers,
@@ -125,7 +126,7 @@ def _collect_status() -> JsonDict:
     ):
         reachable = False
         try:
-            with httpx.Client(timeout=2.0) as client:
+            with httpx.Client(timeout=2.0, headers=auth_headers(mcp_auth_token())) as client:
                 response = client.get(f"{url.rstrip('/')}/health")
                 reachable = response.status_code == 200
         except httpx.HTTPError:

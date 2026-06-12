@@ -1,10 +1,10 @@
 # CLAUDE.md — Code Context for Claude
 
-> **Project Complete (Phase 14).** All 14 phases implemented. Interview docs in `docs/`. Verification: `docs/VERIFICATION.md`. Demo: `atlas-taiwan-demo`.
+> **Project Complete (Phase 15).** All 15 phases implemented. Interview docs in `docs/`. Security: `docs/SECURITY.md`. Verification: `docs/VERIFICATION.md`. Demo: `atlas-taiwan-demo`.
 
 This file is maintained by Cursor after each phase. Claude reads it to understand the codebase without re-reading every file.
 
-Last updated: Phase 14.1 (2026-05-27)
+Last updated: Phase 15 (2026-05-27)
 
 ---
 
@@ -16,7 +16,7 @@ Last updated: Phase 14.1 (2026-05-27)
 | Total files | 150 |
 | Rust LOC | 960 |
 | Python LOC | 5,939 |
-| Phases complete | 0, 1A, 1B, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14 |
+| Phases complete | 0, 1A, 1B, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15 |
 
 ---
 
@@ -97,7 +97,15 @@ Taiwan Strait demo (Phase 13) — single scenario exercises all paths:
 
 ### Rust — Data Layer
 
-**rust/Cargo.toml** — Workspace root. Members: `ollama-check`, `mcp-market-data`, `mcp-edgar`.
+**rust/Cargo.toml** — Workspace root. Members: `ollama-check`, `mcp-common`, `mcp-market-data`, `mcp-edgar`.
+
+**rust/mcp-common/** — Shared MCP security middleware (Phase 15).
+- `bind_addr(port) -> SocketAddr` — `ATLAS_BIND_HOST`, default `127.0.0.1`
+- `apply_security_layers(router)` — CORS, optional rate limit, optional bearer auth
+- `require_bearer_auth` — `ATLAS_MCP_AUTH_TOKEN` middleware
+- `require_rate_limit` — per-IP limit via `ATLAS_RATE_LIMIT_RPS`
+- `validation` — `validate_symbol`, `validate_ticker`, `validate_cik`, `validate_accession_number`, etc.
+- `tls_config()`, `listen_scheme()` — optional HTTPS via `ATLAS_TLS_CERT` / `ATLAS_TLS_KEY`
 
 **rust/ollama-check/src/main.rs**
 - Phase 1A health check binary.
@@ -107,8 +115,8 @@ Taiwan Strait demo (Phase 13) — single scenario exercises all paths:
 - `async fn generate(client: &reqwest::Client, base_url: &str, prompt: &str) -> Result<String, Box<dyn std::error::Error>>`
 
 **rust/mcp-market-data/src/main.rs**
-- Axum server on port `8001`.
-- Routes: `GET /health`, `POST /mcp`.
+- Axum server on port `8001`, bind `127.0.0.1` by default (`mcp-common::bind_addr`).
+- Routes: `GET /health`, `POST /mcp`. Security layers from `mcp-common`.
 - `async fn main()`
 - `async fn health() -> Json<serde_json::Value>`
 - `async fn mcp_endpoint(State(state): State<AppState>, Json(request): Json<JsonRpcRequest>) -> Json<serde_json::Value>`
@@ -314,9 +322,14 @@ Taiwan Strait demo (Phase 13) — single scenario exercises all paths:
 
 ### Protocols
 
+**protocols/auth.py**
+- `mcp_auth_token()`, `a2a_auth_token()` — read optional bearer tokens from env
+- `auth_headers(token)`, `bearer_authorized(header, expected)` — client/server helpers
+- `tls_verify_enabled()` — respects `ATLAS_TLS_INSECURE`
+
 **protocols/mcp/client.py**
 - `class McpClient`
-- `__init__(base_url: str, *, timeout: float = 60.0) -> None`
+- `__init__(base_url, *, timeout, auth_token, verify_tls)` — auto `ATLAS_MCP_AUTH_TOKEN`
 - `initialize() -> dict[str, Any]`
 - `list_tools() -> list[dict[str, Any]]`
 - `call_tool(name: str, arguments: dict[str, Any]) -> dict[str, Any]`
@@ -889,6 +902,12 @@ Other demos:
 - Added `ui/styles.py` design system; polished `ui/components.py` (pills, metric cards, HTML trace tree).
 - Cached `get_status()` (10s), `fetch_agent_cards_status()` (15s), synthesis stack and alert engine via `@st.cache_*`.
 - Updated all views: tabbed query results, status grid, alert cards, HTML trace viewer, briefing callouts.
+
+### Phase 15 — Production security hardening
+- Created `rust/mcp-common/` — bind `127.0.0.1`, bearer auth, rate limit, CORS, TLS, input validation.
+- MCP servers default localhost; optional `ATLAS_MCP_AUTH_TOKEN`, `ATLAS_RATE_LIMIT_RPS`, `ATLAS_TLS_*`.
+- Created `protocols/auth.py`; updated `McpClient`, `A2AClient`, `A2AServer` for bearer tokens.
+- Streamlit `server.address = 127.0.0.1`; `docs/SECURITY.md`; ADR-012 in `docs/DEVLOG.md`.
 
 ---
 

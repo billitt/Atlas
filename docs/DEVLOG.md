@@ -827,3 +827,56 @@ python -m examples.synthesis_demo
 
 **Consequences:** README stays concise with links; deep dives live in `docs/`. CLAUDE.md remains the AI-oriented file map.
 
+---
+
+## Phase 15 — Production security hardening
+
+**Goal:** Harden MCP/A2A/dashboard surfaces for production deployment while preserving zero-config localhost demos.
+
+### Added
+
+| Path | Purpose |
+|------|---------|
+| `rust/mcp-common/` | Shared bind, auth, rate limit, CORS, TLS helpers, input validation |
+| `protocols/auth.py` | Central env-based bearer token and TLS verify helpers |
+| `docs/SECURITY.md` | Network exposure, config matrix, HTTP vs WebSocket rationale |
+
+### Changed
+
+- `rust/mcp-market-data`, `rust/mcp-edgar` — default bind `127.0.0.1`, security middleware, validated tool args
+- `protocols/mcp/client.py`, `protocols/a2a/client.py` — auto bearer headers + TLS verify flag
+- `protocols/a2a/server.py` — optional bearer auth on agent card and `/a2a`
+- `cli/main.py`, `examples/_demo_infra.py`, `ui/runtime.py` — health/card probes pass auth headers
+- `.streamlit/config.toml` — `server.address = "127.0.0.1"`
+- `.env.example` — commented production security block
+
+### Verification
+
+- `cargo test -p mcp-common` — validation and auth unit tests
+- `cargo check --all` — workspace compiles
+- `python -m ruff check .` — Python lint pass
+- Demos unchanged when security env vars are unset
+
+---
+
+## ADR-012: Production security model
+
+**Status:** Accepted (Phase 15)
+
+**Context:** Rust MCP servers previously bound to `0.0.0.0`, exposing LAN-accessible endpoints without auth. Streamlit defaulted to network-visible bind. Portfolio demos must remain frictionless.
+
+**Decision:**
+
+- **Secure-by-configuration** — auth, TLS, and rate limits activate only when env vars are set; defaults preserve localhost demo behavior.
+- **Shared Rust crate** (`mcp-common`) for bind/auth/rate-limit/CORS/validation across both MCP servers.
+- **Bearer tokens** for MCP and A2A (not JWT/OAuth); constant-time comparison on servers.
+- **Default bind `127.0.0.1`** for MCP servers and Streamlit.
+- **HTTP retained** for MCP/A2A; WebSocket streaming documented as future UI enhancement only.
+- **A2A TLS** deferred to reverse proxy; native TLS on Rust MCP via `rustls`.
+
+**Consequences:**
+
+- Production operators set tokens and optional TLS certs via `.env`.
+- Input validation blocks path-like symbols before Yahoo/SEC upstream calls.
+- SEC 125 ms delay remains separate from MCP endpoint rate limiting.
+
