@@ -31,7 +31,3 @@ runs/
 .DS_Store
 Thumbs.db
 
-#docs
-docs/DEMO_SCRIPT.md
-
-

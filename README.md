@@ -39,7 +39,7 @@ See [docs/DEVLOG.md](docs/DEVLOG.md) for ADRs. See [CLAUDE.md](CLAUDE.md) for fi
 
 ## Current Status
 
-Phases **0–14 are complete**. All components are implemented and demo-verified.
+Phases **0–15 are complete**. All components are implemented and demo-verified.
 
 | Phase | Status | What Works |
 |-------|--------|------------|
@@ -59,6 +59,7 @@ Phases **0–14 are complete**. All components are implemented and demo-verified
 | 12 | Complete | Streamlit dashboard (`atlas-dashboard`) |
 | 13 | Complete | Taiwan Strait end-to-end demo scenario |
 | 14 | Complete | Polish, documentation, verification checklist |
+| 15 | Complete | Production security: localhost bind, optional bearer auth, rate limit, TLS, input validation |
 
 ---
 
@@ -218,8 +219,15 @@ Full list in `pyproject.toml` `[project.scripts]`.
 | ADR-007 | 7 | Guardian separation and retry policy |
 | ADR-010 | 10 | Trace storage and retention |
 | ADR-011 | 14 | Documentation structure for interviews |
+| ADR-012 | 15 | Security hardening model |
 
 Full ADR text: [docs/DEVLOG.md](docs/DEVLOG.md)
+
+---
+
+## License
+
+Licensed under the MIT License — see [LICENSE](LICENSE).
 
 ---
 

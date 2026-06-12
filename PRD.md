@@ -2,7 +2,7 @@
 
 **Atlas** is a global business intelligence system powered by autonomous AI agents that communicate via industry-standard protocols. This document is the current plan and master reference point. Nothing here is sacred except the core goal.
 
-**Status (May 2026):** Phases **0–14 are complete**. All core pipelines are implemented and demo-verified. See [README.md](README.md) for quick start and [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md) for the Taiwan Strait interview walkthrough.
+**Status (May 2026):** Phases **0–15 are complete**. All core pipelines are implemented and demo-verified. See [README.md](README.md) for quick start and [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md) for the Taiwan Strait interview walkthrough.
 
 ---
 
@@ -352,7 +352,7 @@ atlas/
 
 ## Build Phases
 
-All phases **0–14 are complete** (May 2026).
+All phases **0–15 are complete** (May 2026).
 
 | Phase | Status | Focus | Outcome | Key Decisions |
 |-------|--------|-------|---------|---------------|
