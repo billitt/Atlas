@@ -239,23 +239,22 @@ def query_command(
     typer.echo(f"Running synthesis query: {text}")
     typer.echo("Starting specialist A2A servers...")
 
-    async def _run() -> None:
+    async def _run(agent_cards: list[dict[str, Any]]) -> None:
         started_at = datetime.now().isoformat(timespec="seconds")
         start_time = perf_counter()
-        with agent_runtime() as agent_cards:
-            synthesis_agent, episodic_memory = _build_synthesis_stack(agent_cards)
-            app_graph = build_synthesis_graph(synthesis_agent, guardian=GuardianAgent())
-            final_state = await run_synthesis_graph(
-                app_graph,
-                {
-                    "query": text,
-                    "messages": [("user", text)],
-                    "agent_cards": agent_cards,
-                    "agent_results": [],
-                    "sources": [],
-                    "guardian_retries": 0,
-                },
-            )
+        synthesis_agent, episodic_memory = _build_synthesis_stack(agent_cards)
+        app_graph = build_synthesis_graph(synthesis_agent, guardian=GuardianAgent())
+        final_state = await run_synthesis_graph(
+            app_graph,
+            {
+                "query": text,
+                "messages": [("user", text)],
+                "agent_cards": agent_cards,
+                "agent_results": [],
+                "sources": [],
+                "guardian_retries": 0,
+            },
+        )
         briefing = final_state["briefing"]
         duration_seconds = round(perf_counter() - start_time, 3)
         trace_id = get_current_trace_id()
@@ -282,7 +281,8 @@ def query_command(
             typer.echo(f"\nDrill down: atlas traces show {trace_id}")
 
     try:
-        asyncio.run(_run())
+        with agent_runtime() as agent_cards:
+            asyncio.run(_run(agent_cards))
     finally:
         shutdown_tracing()
 
@@ -302,16 +302,15 @@ def briefing_command(
     typer.echo(f"Generating {briefing_type} briefing...")
     typer.echo("Starting specialist A2A servers...")
 
-    async def _run() -> None:
-        with agent_runtime() as agent_cards:
-            synthesis_agent, episodic_memory = _build_synthesis_stack(agent_cards)
-            engine = BriefingEngine(
-                synthesis_agent,
-                episodic_memory=episodic_memory,
-                guardian=GuardianAgent(),
-                briefing_type=briefing_type,
-            )
-            result = await engine.generate_briefing(selected_topics)
+    async def _run(agent_cards: list[dict[str, Any]]) -> None:
+        synthesis_agent, episodic_memory = _build_synthesis_stack(agent_cards)
+        engine = BriefingEngine(
+            synthesis_agent,
+            episodic_memory=episodic_memory,
+            guardian=GuardianAgent(),
+            briefing_type=briefing_type,
+        )
+        result = await engine.generate_briefing(selected_topics)
 
         trace_id = get_current_trace_id() or result.get("trace_id")
         typer.echo("")
@@ -320,7 +319,8 @@ def briefing_command(
         typer.echo(format_summary_line(result))
 
     try:
-        asyncio.run(_run())
+        with agent_runtime() as agent_cards:
+            asyncio.run(_run(agent_cards))
     finally:
         shutdown_tracing()
 
