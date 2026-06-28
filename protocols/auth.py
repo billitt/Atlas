@@ -22,6 +22,17 @@ def a2a_auth_token() -> str | None:
     return value or None
 
 
+def api_auth_token() -> str | None:
+    """Return the web API bearer token when configured.
+
+    Falls back to ``ATLAS_MCP_AUTH_TOKEN`` so one local secret can gate MCP and API.
+    """
+    value = os.getenv("ATLAS_API_AUTH_TOKEN", "").strip()
+    if value:
+        return value
+    return mcp_auth_token()
+
+
 def auth_headers(token: str | None) -> dict[str, str]:
     """Build Authorization headers for protocol requests."""
     if not token:
