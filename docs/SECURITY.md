@@ -12,9 +12,10 @@ Production hardening model for the Atlas local-first intelligence platform.
 | MCP edgar `:8002` | `127.0.0.1` | No (default) | Same |
 | A2A agents `:9001–9004` | `127.0.0.1` | No | Python `A2AServer` default |
 | Ollama `:11434` | `127.0.0.1` | No | Ollama default, not Atlas-controlled |
-| Streamlit dashboard | `127.0.0.1` | No | `.streamlit/config.toml` |
+| Atlas API | `127.0.0.1` | No (default) | `api/config.py`, port `:8787` |
+| Vite dev UI | `127.0.0.1` | No | `web/vite.config.ts`, port `:5173` |
 
-Prior to Phase 15, Rust MCP servers bound to `0.0.0.0` and Streamlit used its default bind. Both now default to localhost.
+Prior to Phase 15, Rust MCP servers bound to `0.0.0.0`. All Atlas listening surfaces now default to localhost.
 
 ---
 
@@ -65,7 +66,8 @@ See [`.env.example`](../.env.example) for commented examples.
 
 ### Dashboard
 
-- [`.streamlit/config.toml`](../.streamlit/config.toml) — `server.address = "127.0.0.1"`
+- [`api/config.py`](../api/config.py) — `ATLAS_BIND_HOST`, `ATLAS_API_PORT` (default `:8787`)
+- [`web/vite.config.ts`](../web/vite.config.ts) — dev server bind `127.0.0.1:5173`
 
 ---
 
@@ -75,7 +77,7 @@ See [`.env.example`](../.env.example) for commented examples.
 |-----------|------------|----------------------------|
 | Rust MCP servers | Yes (`axum-server` + `rustls`) | Native or reverse proxy |
 | Python A2A servers | No | TLS termination at Caddy/nginx |
-| Streamlit | No | Reverse proxy or SSH tunnel |
+| Atlas API / Carbon UI | No | Reverse proxy or SSH tunnel |
 
 Defense in depth: even on localhost, TLS prevents other local processes from sniffing loopback traffic when certificates are configured.
 

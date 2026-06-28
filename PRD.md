@@ -106,7 +106,7 @@ The Rust/Python split follows a clear rule: **Rust owns data, Python owns reason
 | LangGraph orchestration | Python | Framework is Python-only, state management |
 | A2A protocol layer | Python | SDK is Python-only |
 | Memory interfaces | Python | ChromaDB and SQLModel are Python-native |
-| CLI + Web UI | Python | Typer and Streamlit are Python |
+| CLI + Web UI | Python + TypeScript | Typer CLI; Carbon React UI + FastAPI API |
 
 The boundary is HTTP. Rust MCP servers expose standard MCP endpoints. Python agents connect as MCP clients. Neither side knows or cares what language the other is written in — that's the point of protocol-native design.
 
@@ -292,7 +292,7 @@ All sources must be publicly accessible with no API key required, or free-tier A
 | Episodic memory | SQLite (SQLModel) | Python | Briefing history, alert history, execution logs |
 | Doc processing | Docling | Python | PDF/filing parsing (feeds into Rust ingestion pipeline) |
 | Task scheduling | APScheduler | Python | Cron-based briefings and watch loops |
-| Web UI | Streamlit | Python | Dashboard — briefings, Q&A, alerts, agent status, execution traces |
+| Web UI | Carbon React + Vite | TypeScript | Dashboard — briefings, Q&A, alerts, agent status, execution traces |
 | CLI | Typer | Python | Terminal-based query, alert monitoring, quick commands |
 | Observability | OpenTelemetry | Both | Full trace of every agent decision, plan execution, and data retrieval |
 
@@ -315,7 +315,7 @@ This is not optional — it's a core feature of Atlas. Every agent decision must
 
 **Why this matters:** A business intelligence tool is only as trustworthy as its reasoning chain. If an analyst asks "why did Atlas flag Taiwan risk as HIGH?" — the system should produce a complete trace from raw GDELT data through agent reasoning to final assessment. No black boxes.
 
-The Streamlit dashboard includes an **execution trace view** where the user can expand any briefing or alert and see the full agent graph, timing, sources, and confidence scores.
+The Carbon web dashboard includes an **execution trace view** where the user can expand any briefing or alert and see the full agent graph, timing, sources, and confidence scores.
 
 ---
 
@@ -332,7 +332,8 @@ atlas/
 ├── services/                ← llm, embeddings, briefing, alerts, scheduler
 ├── observability/           ← tracing, exporters, trace_reader, run_logger
 ├── cli/                     ← Typer CLI (`atlas`)
-├── ui/                      ← Streamlit dashboard (`atlas-dashboard`)
+├── api/                     ← FastAPI streaming API (`atlas-api`, port :8787)
+├── web/                     ← Carbon React dashboard (Vite dev :5173)
 ├── examples/                ← Demos: taiwan_demo, synthesis, briefing, alerts, tracing, _demo_infra
 ├── data/
 │   ├── seed_data/           ← Taiwan Strait demo seed files
@@ -369,7 +370,7 @@ All phases **0–15 are complete** (May 2026).
 | 9 | ✅ | Real-time alerts | `AlertEngine`, `AlertWatcher`, episodic alert records | |
 | 10 | ✅ | Observability | OpenTelemetry tracing, trace viewer, `trace_id` in run logs | ADR-010: Trace storage |
 | 11 | ✅ | CLI | Typer `atlas` command (query, briefing, alerts, status, traces) | |
-| 12 | ✅ | Web dashboard | Streamlit `atlas-dashboard` (5 pages) | |
+| 12 | ✅ | Web dashboard | Carbon UI + FastAPI API (5 pages) | |
 | 13 | ✅ | Demo scenario | Taiwan Strait end-to-end: seed data, `atlas-taiwan-demo`, DEMO_SCRIPT | |
 | 14 | ✅ | Polish & presentation | Docs set, README, ruff/clippy cleanup, VERIFICATION checklist | ADR-011: Doc structure |
 

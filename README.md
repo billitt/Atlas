@@ -56,7 +56,7 @@ Phases **0–15 are complete**. All components are implemented and demo-verified
 | 9 | Complete | Real-time alerts via `AlertEngine` + `AlertWatcher` |
 | 10 | Complete | OpenTelemetry tracing across all pipelines |
 | 11 | Complete | Typer CLI (`atlas`) |
-| 12 | Complete | Streamlit dashboard (`atlas-dashboard`) |
+| 12 | Complete | Carbon web UI + FastAPI API (`atlas-api`, `web/`) |
 | 13 | Complete | Taiwan Strait end-to-end demo scenario |
 | 14 | Complete | Polish, documentation, verification checklist |
 | 15 | Complete | Production security: localhost bind, optional bearer auth, rate limit, TLS, input validation |
@@ -69,7 +69,8 @@ Phases **0–15 are complete**. All components are implemented and demo-verified
 atlas/
 ├── agents/           # Specialist agents (market, geopolitical, supply_chain, research, synthesis, guardian)
 ├── cli/              # Typer CLI (`atlas query`, `atlas status`, etc.)
-├── ui/               # Streamlit dashboard pages
+├── api/              # FastAPI streaming API (`atlas-api`)
+├── web/              # Carbon React dashboard (Vite)
 ├── orchestration/    # LangGraph synthesis workflow
 ├── protocols/        # MCP client + A2A server/client/discovery
 ├── memory/           # Semantic (ChromaDB), episodic (SQLite), working
@@ -101,7 +102,7 @@ Equivalent after seeding:
 
 ```powershell
 atlas query "What's the exposure risk if Taiwan Strait tensions escalate? Consider semiconductor supply chains, market impact, and TSMC filing risk factors."
-atlas-dashboard   # Query page with the same question
+# Or use the web UI Query page with the same question (see Web Dashboard below)
 ```
 
 Expected output: [data/sample_scenarios/taiwan_demo_expected_output.md](data/sample_scenarios/taiwan_demo_expected_output.md)
@@ -111,7 +112,7 @@ Expected output: [data/sample_scenarios/taiwan_demo_expected_output.md](data/sam
 ## Architecture Snapshot
 
 ```text
-User (CLI / Dashboard / demos)
+User (CLI / Carbon web UI / demos)
   -> LangGraph: plan -> delegate -> synthesize -> guardian
   -> Market :9001 -> MCP :8001 -> Yahoo Finance
   -> Geopolitical :9002 -> semantic memory (seed GDELT)
@@ -132,7 +133,9 @@ Full diagram: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 | Ollama | `11434` | `ollama serve` |
 | MCP market data | `8001` | `cargo run -p mcp-market-data` |
 | MCP EDGAR | `8002` | `cargo run -p mcp-edgar` |
-| A2A agents | `9001`–`9004` | Auto-started by CLI/demos |
+| A2A agents | `9001`–`9004` | Auto-started by CLI/API/demos |
+| Atlas API | `8787` | `atlas-api` |
+| Vite dev UI | `5173` | `cd web && npm run dev` |
 
 ---
 
@@ -183,11 +186,28 @@ atlas traces show <trace_id>
 
 ## Web Dashboard
 
+Development (API + Vite dev server with hot reload):
+
 ```powershell
-atlas-dashboard
+# Terminal C: MCP servers + Ollama already running
+atlas-api
+# Terminal D:
+cd web
+npm install
+npm run dev
 ```
 
-Opens at `http://localhost:8501` — Query, Briefings, Alerts, Agent Status, Trace Viewer.
+Open `http://127.0.0.1:5173` — Query, Briefings, Alerts, Agent Status, Trace Viewer. Vite proxies `/api` and `/health` to the API on `:8787`.
+
+Production (single process serves API + built static UI):
+
+```powershell
+cd web && npm run build
+$env:ATLAS_API_PRODUCTION = "1"
+atlas-api
+```
+
+Open `http://127.0.0.1:8787`.
 
 ---
 
@@ -195,7 +215,7 @@ Opens at `http://localhost:8501` — Query, Briefings, Alerts, Agent Status, Tra
 
 ```powershell
 atlas                    # Main CLI
-atlas-dashboard          # Streamlit UI
+atlas-api                # FastAPI server (web UI backend)
 atlas-taiwan-demo        # Full Taiwan Strait scenario
 atlas-synthesis-demo     # Multi-agent synthesis
 atlas-tracing-demo       # OpenTelemetry trace demo

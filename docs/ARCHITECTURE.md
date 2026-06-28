@@ -6,11 +6,11 @@ Concise system design reference for interviews. Read time: ~5 minutes.
 
 ## System Overview
 
-Atlas is a **local-first intelligence platform** that combines a Rust data layer with a Python agent layer. Users interact via CLI, Streamlit dashboard, or demo scripts. All reasoning runs on **IBM Granite via Ollama** — no cloud LLM dependencies.
+Atlas is a **local-first intelligence platform** that combines a Rust data layer with a Python agent layer. Users interact via CLI, Carbon web UI, or demo scripts. All reasoning runs on **IBM Granite via Ollama** — no cloud LLM dependencies.
 
 ```text
 ┌─────────────────────────────────────────────────────────────────┐
-│  User interfaces: Typer CLI · Streamlit dashboard · demo scripts │
+│  User interfaces: Typer CLI · Carbon web UI · demo scripts      │
 └────────────────────────────┬────────────────────────────────────┘
                              │
 ┌────────────────────────────▼────────────────────────────────────┐
@@ -43,7 +43,7 @@ Atlas is a **local-first intelligence platform** that combines a Rust data layer
 | Layer | Language | Responsibility |
 |-------|----------|----------------|
 | **Data services** | Rust (Axum) | HTTP MCP servers, external API clients, rate limiting, parsing |
-| **Intelligence** | Python | Agents, orchestration, memory, CLI, dashboard |
+| **Intelligence** | Python | Agents, orchestration, memory, CLI, API |
 | **Inference** | Ollama (Granite) | Planning, analysis, reflection, synthesis, validation |
 
 **Why split?** Rust handles I/O-bound, latency-sensitive data fetching with strong typing and predictable resource use. Python owns agent logic, LangGraph workflows, and rapid iteration on prompts and protocols. The boundary is **MCP over HTTP JSON-RPC** — Python never calls Yahoo or SEC directly for production paths.

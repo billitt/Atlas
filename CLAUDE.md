@@ -23,7 +23,7 @@ Last updated: Phase 15 (2026-05-27)
 ## Architecture Summary
 
 ```text
-User (Typer CLI `atlas` / Streamlit dashboard `ui/streamlit_app.py`)
+User (Typer CLI `atlas` / Carbon web UI via `api/` + `web/`)
   -> LangGraph Synthesis workflow (orchestration/graph.py)
     -> Synthesis Agent (agents/synthesis/agent.py)
       -> Planner (agents/synthesis/planner.py) creates DAG plan from Agent Cards
@@ -87,7 +87,7 @@ Taiwan Strait demo (Phase 13) — single scenario exercises all paths:
     -> LangGraph synthesis (4 A2A agents + Guardian)
     -> BriefingEngine (single topic + delta)
     -> OpenTelemetry trace tree
-  Equivalent: atlas query "..." | ui/views/query.py (after seeding)
+  Equivalent: atlas query "..." | web Query page at http://127.0.0.1:5173 (after seeding)
   Interview script: docs/DEMO_SCRIPT.md
 ```
 
@@ -555,46 +555,23 @@ Taiwan Strait demo (Phase 13) — single scenario exercises all paths:
 - `format_history_row(record: dict) -> str`
 - Uses `typer.style` ANSI colors: GREEN=HIGH/pass, YELLOW=MEDIUM, RED=LOW/HIGH severity
 
-### UI — Streamlit Dashboard
+### API + Web UI
 
-**ui/streamlit_app.py**
-- `run_dashboard() -> None` — page config, sidebar nav, auto-start A2A agents, route to views
-- `render_sidebar_status() -> None` — compact Ollama/MCP/memory status in sidebar (cached via `get_status()`)
-- `main() -> None` — subprocess-only launcher for `atlas-dashboard` entry point
-- `_streamlit_script_active() -> bool` — guards `run_dashboard()` to Streamlit script context only
-- `PAGES: dict[str, Callable[[], None]]` — Query, Briefings, Alerts, Agent Status, Trace Viewer
+**api/main.py**
+- `create_app(*, production: bool = False) -> FastAPI` — mounts routes, optional static UI from `web/dist`
+- `main() -> None` — uvicorn entry via `atlas-api` on `:8787`
+- Lifespan boots A2A agents via `api/runtime.py`
 
-**ui/runtime.py**
-- `get_status() -> dict` — cached 10s via `@st.cache_data`; wraps `cli.main._collect_status()`
-- `fetch_agent_cards_status() -> list[dict]` — cached 15s; probe `:9001`–`:9004` agent cards
-- `get_ollama_vram() -> str | None` — cached 30s; Ollama `/api/ps` VRAM summary
-- `check_prerequisites(*, require_mcp, require_ollama) -> tuple[bool, list[str]]`
-- `show_prerequisite_warnings(...) -> bool` — display st.warning for missing services
-- `ensure_agent_runtime() -> list[dict]` — session-scoped A2A startup with `agent_boot_in_progress` guard
-- `get_agent_cards() -> list[dict]`, `build_synthesis_stack()` (`@st.cache_resource`), `build_alert_engine()` (`@st.cache_resource`)
-- `find_run_log_by_trace_id(trace_id: str) -> Path | None`
+**api/runtime.py**
+- `_check_prerequisites()` — wraps `cli.main._collect_status()` for API readiness
+- `_fetch_agent_cards_status()` — probe `:9001`–`:9004` agent cards
+- `boot_agent_runtime()` / `shutdown_agent_servers()` — A2A startup for API lifespan
 
-**ui/styles.py**
-- `PALETTE`, `CONFIDENCE_COLORS`, `SEVERITY_COLORS` — design tokens
-- `global_css() -> str` — dashboard-wide CSS
+**api/routes/** — `status`, `query` (SSE), `agents`, `briefings`, `alerts`, `traces`
 
-**ui/components.py**
-- `confidence_badge(level: str) -> None`, `guardian_badge(passed: bool) -> None`, `severity_badge(severity: str) -> None`
-- `metric_card(label, value, *, status: str | None) -> None`
-- `agent_status_card(name, port, reachable, skills) -> None`
-- `alert_card(title, severity, summary, *, evidence, context) -> None`
-- `delta_callout(text: str) -> None`, `source_list(sources) -> None`
-- `render_trace_tree_html(nodes, *, height: int = 520) -> None` — HTML/CSS collapsible tree
-- `render_span_tree(nodes, *, depth: int = 0) -> None` — Streamlit fallback
-- `service_down_message(title, detail) -> None`
-
-**ui/views/query.py** — `render() -> None` — tabbed synthesis Q&A (Analysis | Guardian | Sources | Trace)
-**ui/views/briefings.py** — `render() -> None` — briefing generator + episodic history
-**ui/views/alerts.py** — `render() -> None` — alert check, watch fragment, severity-bordered cards
-**ui/views/agent_status.py** — `render() -> None` — metric grid for Ollama, MCP, agents, memory
-**ui/views/trace_viewer.py** — `render() -> None` — HTML span tree + plain-text fallback
-
-**.streamlit/config.toml** — `headless`, `showSidebarNavigation = false` (disables auto page discovery)
+**web/** — Carbon React dashboard (Query, Briefings, Alerts, Agent Status, Trace Viewer)
+- Dev: `cd web && npm run dev` → `http://127.0.0.1:5173` (proxies to API `:8787`)
+- Prod: `npm run build` + `ATLAS_API_PRODUCTION=1 atlas-api` → `http://127.0.0.1:8787`
 
 ### Examples / Scripts
 
@@ -717,10 +694,10 @@ Other demos:
 ### Config
 
 **pyproject.toml**
-- Packages: `services`, `examples`, `scripts`, `protocols`, `agents`, `orchestration`, `memory`, `observability`, `cli`, `ui`, `ingestion`.
+- Packages: `services`, `examples`, `scripts`, `protocols`, `agents`, `orchestration`, `memory`, `observability`, `cli`, `ingestion`, `api`.
 - Dependencies include: `langgraph`, `langchain-ollama`, `beeai-framework`, `a2a-sdk`, `mcp`, `httpx`, `chromadb`, `sqlmodel`, `python-dotenv`.
 - `beeai-framework` is retained because `examples/beeai_hello.py` imports it; Atlas production agents use the custom `BaseAgent` pattern.
-- Scripts include: `atlas-memory-demo`, `atlas-synthesis-demo`, `atlas-edgar-demo`, `atlas-guardian-demo`, `atlas-briefing-demo`, `atlas-scheduler-demo`, `atlas-alert-demo`, `atlas-alert-watch-demo`, `atlas-tracing-demo`, `atlas-taiwan-demo`, `atlas`, `atlas-dashboard`.
+- Scripts include: `atlas-memory-demo`, `atlas-synthesis-demo`, `atlas-edgar-demo`, `atlas-guardian-demo`, `atlas-briefing-demo`, `atlas-scheduler-demo`, `atlas-alert-demo`, `atlas-alert-watch-demo`, `atlas-tracing-demo`, `atlas-taiwan-demo`, `atlas`, `atlas-api`.
 
 **.env.example**
 - `OLLAMA_BASE_URL=http://localhost:11434`
@@ -907,7 +884,11 @@ Other demos:
 - Created `rust/mcp-common/` — bind `127.0.0.1`, bearer auth, rate limit, CORS, TLS, input validation.
 - MCP servers default localhost; optional `ATLAS_MCP_AUTH_TOKEN`, `ATLAS_RATE_LIMIT_RPS`, `ATLAS_TLS_*`.
 - Created `protocols/auth.py`; updated `McpClient`, `A2AClient`, `A2AServer` for bearer tokens.
-- Streamlit `server.address = 127.0.0.1`; `docs/SECURITY.md`; ADR-012 in `docs/DEVLOG.md`.
+- API bind `127.0.0.1`; `docs/SECURITY.md`; ADR-012 in `docs/DEVLOG.md`.
+
+### Post-Phase 15 — Carbon web UI replaces Streamlit
+- Removed `ui/` Streamlit package, `streamlit` dependency, and `atlas-dashboard` entry point.
+- Graphical interface is now Carbon React (`web/`) + FastAPI (`api/`, `atlas-api`).
 
 ---
 
@@ -995,14 +976,14 @@ cli/main.py
   -> observability/trace_reader.py (traces commands)
   -> observability/run_logger.py + observability/tracing.py (query)
 
-ui/streamlit_app.py
-  -> ui/runtime.py -> cli/main.py + examples/_demo_infra.py
-  -> ui/components.py
-  -> ui/views/query.py -> orchestration/graph.py, observability/run_logger.py, memory/episodic.py
-  -> ui/views/briefings.py -> services/briefing.py, memory/episodic.py
-  -> ui/views/alerts.py -> services/alerts.py, services/alert_defaults.py
-  -> ui/views/agent_status.py -> ui/runtime.py
-  -> ui/views/trace_viewer.py -> observability/trace_reader.py, ui/runtime.py
+api/main.py
+  -> api/runtime.py -> cli/main.py + examples/_demo_infra.py
+  -> api/routes/query.py -> orchestration/graph.py, observability/run_logger.py, memory/episodic.py
+  -> api/routes/briefings.py -> services/briefing.py, memory/episodic.py
+  -> api/routes/alerts.py -> services/alerts.py, services/alert_defaults.py
+  -> api/routes/status.py -> cli/main._collect_status()
+  -> api/routes/traces.py -> observability/trace_reader.py
+  -> web/ (Carbon React UI, dev proxy to :8787)
 
 ingestion/seed_loader.py
   -> memory/semantic.py -> services/embeddings.py -> Ollama /api/embed
@@ -1039,6 +1020,8 @@ examples/taiwan_demo.py
 | 9003 | A2A Supply Chain Agent | Started by demos |
 | 9004 | A2A Research & Filing Agent | Started by demos |
 | 9005 | A2A Guardian Agent | Agent Card reserved; validation currently runs in graph |
+| 8787 | Atlas API (`atlas-api`) | FastAPI + optional production static UI |
+| 5173 | Vite dev UI | `cd web && npm run dev` |
 
 ---
 
@@ -1048,4 +1031,4 @@ examples/taiwan_demo.py
 - Supply-chain live UN Comtrade MCP server not built; agent uses semantic memory seed + model knowledge.
 - Rust MCP servers built: `mcp-market-data`, `mcp-edgar`; future MCP servers remain unbuilt.
 
-`memory/` is no longer a stub as of Phase 5. `agents/research/` is no longer a stub as of Phase 6. `agents/guardian/` is no longer a stub as of Phase 7. `observability/` is no longer a stub as of Phase 10. `cli/` is no longer a stub as of Phase 11. `ui/` is no longer a stub as of Phase 12 (Streamlit dashboard). `ingestion/` has `seed_loader.py` as of Phase 13 (Taiwan scenario); full live ingestion pipelines remain unbuilt.
+`memory/` is no longer a stub as of Phase 5. `agents/research/` is no longer a stub as of Phase 6. `agents/guardian/` is no longer a stub as of Phase 7. `observability/` is no longer a stub as of Phase 10. `cli/` is no longer a stub as of Phase 11. `api/` + `web/` provide the graphical interface (replacing the Phase 12 Streamlit dashboard). `ingestion/` has `seed_loader.py` as of Phase 13 (Taiwan scenario); full live ingestion pipelines remain unbuilt.

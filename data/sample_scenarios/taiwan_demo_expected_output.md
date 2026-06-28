@@ -132,7 +132,7 @@ Same LangGraph pipeline; output formatted via `cli/formatters.py`.
 
 ## Dashboard equivalence
 
-1. `atlas-dashboard` or `streamlit run ui/streamlit_app.py`
+1. `atlas-api` (and `cd web && npm run dev` for development)
 2. Query page → paste the same question → Run
 3. Trace Viewer page → open trace by `trace_id` from run log
 

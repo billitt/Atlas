@@ -136,13 +136,15 @@ After seeding once:
 atlas query "What's the exposure risk if Taiwan Strait tensions escalate? Consider semiconductor supply chains, market impact, and TSMC filing risk factors."
 ```
 
-**Dashboard:**
+**Web UI:**
 
 ```powershell
-atlas-dashboard
+atlas-api
+# separate terminal:
+cd web && npm run dev
 ```
 
-Query page → paste the same question. Tabs: Analysis | Guardian | Sources | Trace.
+Open `http://127.0.0.1:5173` → Query page → paste the same question. Tabs: Analysis, Guardian, Sources, Trace.
 
 ---
 

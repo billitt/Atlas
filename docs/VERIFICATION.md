@@ -36,7 +36,7 @@ Ollama must be running.
 
 ```powershell
 python -c "from cli.main import app; print('cli ok')"
-python -c "from ui.streamlit_app import main; print('ui ok')"
+python -c "from api.main import create_app; print('api ok')"
 python -c "from examples.taiwan_demo import main; print('taiwan ok')"
 python -c "from ingestion.seed_loader import load_taiwan_scenario; print('ingestion ok')"
 python -c "from orchestration import build_synthesis_graph, run_synthesis_graph; print('orchestration ok')"
@@ -85,11 +85,19 @@ Six steps:
 
 Total duration: ~5–12 minutes.
 
-### `atlas-dashboard`
+### Web dashboard (dev)
 
-- Opens at `http://localhost:8501`
+```powershell
+atlas-api
+# separate terminal:
+cd web && npm run dev
+```
+
+- UI at `http://127.0.0.1:5173`, API at `http://127.0.0.1:8787`
 - Five pages load: Query, Briefings, Alerts, Agent Status, Trace Viewer
-- Sidebar shows system status
+- Status endpoint: `GET /api/status`
+
+Production: `cd web && npm run build`, then `$env:ATLAS_API_PRODUCTION = "1"; atlas-api` → `http://127.0.0.1:8787`
 
 ### Other entry points
 
@@ -124,7 +132,7 @@ With MCP servers running (`cargo run -p mcp-market-data`, `cargo run -p mcp-edga
 | Invalid symbol | MCP `get_quote` with `../../etc` | JSON-RPC error, no Yahoo call |
 | Rate limit | Set `ATLAS_RATE_LIMIT_RPS=2`; burst >2 requests/sec | HTTP 429 |
 | Rust unit tests | `cd rust && cargo test -p mcp-common` | 6 tests passed |
-| Streamlit bind | `streamlit run ui/streamlit_app.py`; check netstat | `127.0.0.1:8501` only |
+| API bind | `atlas-api`; check netstat | `127.0.0.1:8787` only |
 
 See [SECURITY.md](SECURITY.md) for configuration details.
 

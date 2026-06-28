@@ -31,7 +31,7 @@ AGENT_ENDPOINTS = (
 def _check_prerequisites(
     *, require_mcp: bool = True, require_ollama: bool = True
 ) -> tuple[bool, list[str]]:
-    """Return readiness and human-readable issue messages (no Streamlit)."""
+    """Return readiness and human-readable issue messages."""
     status = _collect_status()
     issues: list[str] = []
 
@@ -64,7 +64,7 @@ def _check_prerequisites(
 
 
 def _fetch_agent_cards_status() -> list[JsonDict]:
-    """Probe A2A agent card endpoints (no Streamlit dependency)."""
+    """Probe A2A agent card endpoints."""
     cards: list[JsonDict] = []
     for name, url in AGENT_ENDPOINTS:
         reachable = False

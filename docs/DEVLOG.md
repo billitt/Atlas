@@ -20,7 +20,7 @@ Step-by-step record of build progress and architecture decision records (ADRs).
 
 ### Installed stack (via `pip install -e ".[dev]"`)
 
-LangGraph, LangChain-Ollama, BeeAI Framework, A2A SDK, MCP, ChromaDB, SQLModel, Docling, APScheduler, Streamlit, Typer, httpx, feedparser, OpenTelemetry.
+LangGraph, LangChain-Ollama, BeeAI Framework, A2A SDK, MCP, ChromaDB, SQLModel, Docling, APScheduler, FastAPI, Typer, httpx, feedparser, OpenTelemetry.
 
 ### Verification runs
 
@@ -863,14 +863,14 @@ python -m examples.synthesis_demo
 
 **Status:** Accepted (Phase 15)
 
-**Context:** Rust MCP servers previously bound to `0.0.0.0`, exposing LAN-accessible endpoints without auth. Streamlit defaulted to network-visible bind. Portfolio demos must remain frictionless.
+**Context:** Rust MCP servers previously bound to `0.0.0.0`, exposing LAN-accessible endpoints without auth. Portfolio demos must remain frictionless.
 
 **Decision:**
 
 - **Secure-by-configuration** — auth, TLS, and rate limits activate only when env vars are set; defaults preserve localhost demo behavior.
 - **Shared Rust crate** (`mcp-common`) for bind/auth/rate-limit/CORS/validation across both MCP servers.
 - **Bearer tokens** for MCP and A2A (not JWT/OAuth); constant-time comparison on servers.
-- **Default bind `127.0.0.1`** for MCP servers and Streamlit.
+- **Default bind `127.0.0.1`** for MCP servers and the Atlas API.
 - **HTTP retained** for MCP/A2A; WebSocket streaming documented as future UI enhancement only.
 - **A2A TLS** deferred to reverse proxy; native TLS on Rust MCP via `rustls`.
 
@@ -879,4 +879,12 @@ python -m examples.synthesis_demo
 - Production operators set tokens and optional TLS certs via `.env`.
 - Input validation blocks path-like symbols before Yahoo/SEC upstream calls.
 - SEC 125 ms delay remains separate from MCP endpoint rate limiting.
+
+---
+
+## Post-Phase 15 — Streamlit removed; Carbon UI is sole dashboard
+
+**Status:** Complete (June 2026)
+
+The Phase 12 Streamlit dashboard (`ui/`, `atlas-dashboard`) was removed after the Carbon React UI (`web/`) and FastAPI API (`api/`, `atlas-api`) were verified. The graphical interface is now `web/` + `api/` only; CLI unchanged.
 
