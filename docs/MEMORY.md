@@ -44,7 +44,7 @@ Agents call semantic memory in `execute()` before Granite analysis:
 |-------|--------|------------------|
 | Market | General context | `source=yahoo`, prior analyses |
 | Geopolitical | `category=geopolitical`, `source=seed_gdelt` | Taiwan scenario events |
-| Supply Chain | `category=supply_chain`, `source=seed_comtrade` | Trade flow, chokepoints |
+| Supply Chain | `source=comtrade_live` | Cached live Comtrade fetch rows |
 | Research | Filing chunks | `source=sec_edgar`, `accession_number` |
 
 Matched excerpts are injected into the Granite prompt; metadata becomes `sources` in `AgentResult`.

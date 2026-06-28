@@ -34,7 +34,7 @@ async def run() -> None:
     )
 
     print("Atlas Tracing Demo (Phase 10)")
-    print("Prerequisites: Ollama running, MCP market :8001, MCP EDGAR :8002")
+    print("Prerequisites: Ollama running, MCP market :8001, MCP EDGAR :8002, MCP trade :8003")
     print(f"Query: {query}")
     print("-" * 80)
 

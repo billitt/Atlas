@@ -91,13 +91,18 @@ Supply-chain dependencies, chokepoints, substitution options, lead-time risk.
 
 ### Data connections
 
-- **Live MCP:** Not yet built (future UN Comtrade / port data MCP)
-- **Semantic memory:** Queries trade-flow and chokepoint seed data
-- **Fallback:** Model knowledge with disclosure
+| Server | Tool | Purpose |
+|--------|------|---------|
+| `mcp-trade` :8003 | `get_trade_data` | UN Comtrade bilateral trade flows |
+| | `get_tariffline` | Tariff-line granularity |
+| | `preview_trade` | Keyless preview (500 record cap) |
+
+- **Semantic memory:** Caches live Comtrade rows (`source=comtrade_live`); no trade-flow seed ingestion
+- **Fallback:** If MCP unavailable at startup, agent continues with cache + model knowledge and explicit LOW confidence disclosure
 
 ### Reflection
 
-Same pattern as Geopolitical — seed context must be traceable; model-only answers must disclose limits.
+Checks that trade claims trace to Comtrade MCP or cached `comtrade_live` context; flags model-only answers without disclosure.
 
 ### Agent Card skills
 

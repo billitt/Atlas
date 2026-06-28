@@ -25,7 +25,7 @@ async def run() -> None:
 
     print("Atlas Scheduler Demo (Phase 8)")
     print("Schedules a custom briefing every 60 seconds and stops after 3 minutes.")
-    print("Prerequisites: Ollama running, MCP market :8001, MCP EDGAR :8002")
+    print("Prerequisites: Ollama running, MCP market :8001, MCP EDGAR :8002, MCP trade :8003")
     print("-" * 80)
 
     await start_mcp_check()

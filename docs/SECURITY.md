@@ -10,6 +10,7 @@ Production hardening model for the Atlas local-first intelligence platform.
 |---------|--------------|----------------|-------|
 | MCP market-data `:8001` | `127.0.0.1` | No (default) | `ATLAS_BIND_HOST` overrides |
 | MCP edgar `:8002` | `127.0.0.1` | No (default) | Same |
+| MCP trade `:8003` | `127.0.0.1` | No (default) | Same |
 | A2A agents `:9001–9004` | `127.0.0.1` | No | Python `A2AServer` default |
 | Ollama `:11434` | `127.0.0.1` | No | Ollama default, not Atlas-controlled |
 | Atlas API | `127.0.0.1` | No (default) | `api/config.py`, port `:8787` |
@@ -24,6 +25,7 @@ Prior to Phase 15, Rust MCP servers bound to `0.0.0.0`. All Atlas listening surf
 - **No API keys** are transmitted between Atlas components today.
 - **Yahoo Finance** — no credentials required.
 - **SEC EDGAR** — `User-Agent` header only (`Atlas-MCP/0.1 (...)`), no API key.
+- **UN Comtrade** — optional `ATLAS_COMTRADE_API_KEY` (header `Ocp-Apim-Subscription-Key`); Rust `mcp-trade` loads via dotenvy.
 - **Ollama** — local inference, no cloud API key.
 
 Production auth tokens (`ATLAS_MCP_AUTH_TOKEN`, `ATLAS_A2A_AUTH_TOKEN`) are optional shared secrets for service-to-service calls, not upstream API keys.

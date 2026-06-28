@@ -1,10 +1,10 @@
 # CLAUDE.md — Code Context for Claude
 
-> **Project Complete (Phase 15).** All 15 phases implemented. Interview docs in `docs/`. Security: `docs/SECURITY.md`. Verification: `docs/VERIFICATION.md`. Demo: `atlas-taiwan-demo`.
+> **Project Complete (Phase 16).** All 16 phases implemented. Interview docs in `docs/`. Security: `docs/SECURITY.md`. Verification: `docs/VERIFICATION.md`. Demo: `atlas-taiwan-demo`.
 
 This file is maintained by Cursor after each phase. Claude reads it to understand the codebase without re-reading every file.
 
-Last updated: Phase 15 (2026-05-27)
+Last updated: Phase 16.1 (2026-06-28)
 
 ---
 
@@ -16,7 +16,7 @@ Last updated: Phase 15 (2026-05-27)
 | Total files | 150 |
 | Rust LOC | 960 |
 | Python LOC | 5,939 |
-| Phases complete | 0, 1A, 1B, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15 |
+| Phases complete | 0, 1A, 1B, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16 |
 
 ---
 
@@ -39,8 +39,9 @@ User (Typer CLI `atlas` / Carbon web UI via `api/` + `web/`)
           -> Semantic Memory seed GDELT context when ingested (memory/semantic.py)
           -> Granite analysis with explicit live-data limitation disclosure
         -> Supply Chain Agent :9003 (agents/supply_chain/agent.py)
-          -> Semantic Memory seed trade-flow / chokepoint context when ingested
-          -> Granite analysis with explicit live-data limitation disclosure
+          -> MCP client -> Rust MCP server :8003 (rust/mcp-trade/) -> UN Comtrade API
+          -> Semantic Memory cache (`source=comtrade_live`) when live fetch succeeds
+          -> Resilient setup: continues with cache/model path if :8003 unavailable at startup
         -> Research & Filing Agent :9004 (agents/research/agent.py)
           -> Semantic Memory ingest for filing text (memory/semantic.py)
           -> MCP client (protocols/mcp/client.py)
@@ -75,7 +76,8 @@ Real-time alert flow:
 
 Memory tiers:
   Tier 1 Semantic: ChromaDB persistent vectors in data/chroma
-    -> Taiwan demo seed via ingestion/seed_loader.py (GDELT, filing excerpt, trade flow)
+    -> Taiwan demo seed via ingestion/seed_loader.py (GDELT, filing excerpt)
+    -> Live Comtrade rows cached by Supply Chain Agent (`source=comtrade_live`)
   Tier 2 Episodic: SQLite records in data/sqlite/atlas_episodic.db
   Tier 3 Working: in-context scratchpad (memory/working.py), used by demos/LangGraph state
 
@@ -327,6 +329,10 @@ Taiwan Strait demo (Phase 13) — single scenario exercises all paths:
 - `auth_headers(token)`, `bearer_authorized(header, expected)` — client/server helpers
 - `tls_verify_enabled()` — respects `ATLAS_TLS_INSECURE`
 
+**protocols/mcp/endpoints.py**
+- Single source for MCP bind host, ports (`ATLAS_MCP_*_PORT`), URL helpers, and `MCP_HEALTH_TARGETS`.
+- `mcp_market_url()`, `mcp_edgar_url()`, `mcp_trade_url()` — used by CLI status, API config, agents, demos.
+
 **protocols/mcp/client.py**
 - `class McpClient`
 - `__init__(base_url, *, timeout, auth_token, verify_tls)` — auto `ATLAS_MCP_AUTH_TOKEN`
@@ -394,14 +400,20 @@ Taiwan Strait demo (Phase 13) — single scenario exercises all paths:
 - `_semantic_context(query: str) -> tuple[str, list[dict[str, Any]]]` — filters matches with `category=geopolitical` or `source=seed_gdelt`
 - Uses Granite model knowledge when no seed context; grounds in semantic memory when Taiwan scenario ingested.
 
-**agents/supply_chain/agent.py** (~175 lines)
+**agents/supply_chain/agent.py**
 - `class SupplyChainAgent(BaseAgent)`
-- Optional `semantic_memory: SemanticMemory | None` in `__init__`; defaults to `SemanticMemory()`.
-- `plan(query: str) -> dict[str, Any]`
-- `execute(query: str, plan: dict[str, Any]) -> AgentResult` — queries `_semantic_context()` before Granite analysis
-- `reflect(query: str, draft: AgentResult) -> tuple[bool, str, Confidence]`
-- `_semantic_context(query: str) -> tuple[str, list[dict[str, Any]]]` — filters matches with `category=supply_chain` or `source=seed_comtrade`
-- Uses Granite model knowledge when no seed context; grounds in trade-flow seed when ingested.
+- Required `mcp_client: McpClient` (Comtrade on `:8003`); URL from `protocols.mcp.endpoints.mcp_trade_url()`.
+- `semantic_memory: SemanticMemory` — live Comtrade cache (`source=comtrade_live`), not seed fixtures.
+- `setup() -> None` — loads Comtrade tools; try/except so A2A server starts even when MCP is down.
+- `plan()` derives Comtrade params (M49 codes, HS cmdCode, period).
+- `execute()` — live MCP fetch → cache to ChromaDB on success; on failure query `comtrade_live` cache; insufficient → LOW with no invented figures.
+- `reflect()` — downgrades confidence when `used_cache`; forces LOW on insufficient data.
+- **agents/supply_chain/tools.py** — `call_get_trade_data`, `call_get_tariffline`, MCP helpers.
+
+**rust/mcp-trade/** — UN Comtrade MCP server on `:8003`.
+- `src/main.rs` — `dotenvy::dotenv()` loads `.env`; reads `ATLAS_COMTRADE_API_KEY`; logs keyed vs preview-only mode.
+- `src/mcp.rs` — JSON-RPC tools: `get_trade_data`, `get_tariffline`, `preview_trade`.
+- `src/comtrade.rs` — Comtrade API client, 250 ms throttle, preview fallback on missing/rejected key.
 
 **agents/research/agent.py** (214 lines)
 - `class ResearchFilingAgent(BaseAgent)`
@@ -857,7 +869,7 @@ Other demos:
 - Created `examples/taiwan_demo.py` — six-step end-to-end demo (seed, alert, synthesis, briefing, trace, summary).
 - Created `data/sample_scenarios/taiwan_demo_expected_output.md` and `docs/DEMO_SCRIPT.md`.
 - Modified `agents/geopolitical/agent.py` — optional semantic memory; `_semantic_context()` in `execute()`.
-- Modified `agents/supply_chain/agent.py` — same pattern for trade-flow seed data.
+- Modified `agents/supply_chain/agent.py` — live Comtrade MCP + ChromaDB cache (Phase 16).
 - Modified `pyproject.toml` — adds `ingestion` package and `atlas-taiwan-demo` script.
 - Modified `README.md` and `docs/DEVLOG.md` — Phase 13 status and demo instructions.
 - Verification: Ruff check and import smoke test completed successfully.
@@ -890,6 +902,20 @@ Other demos:
 - Removed `ui/` Streamlit package, `streamlit` dependency, and `atlas-dashboard` entry point.
 - Graphical interface is now Carbon React (`web/`) + FastAPI (`api/`, `atlas-api`).
 
+### Phase 16 — UN Comtrade MCP + live SupplyChainAgent
+- Created `rust/mcp-trade/` — Axum MCP on `:8003`, dotenvy loads `ATLAS_COMTRADE_API_KEY`, Comtrade API client with preview fallback.
+- Added Comtrade validators to `rust/mcp-common/src/validation.rs`.
+- Created `agents/supply_chain/tools.py`; rewrote `agents/supply_chain/agent.py` for live-first Comtrade + ChromaDB cache.
+- Removed trade-flow seed ingestion from `ingestion/seed_loader.py` (GDELT seed untouched).
+- Updated `examples/_demo_infra.py` — `:8003` health check, SupplyChainAgent wired to McpClient.
+- Updated docs: README, DATA_SOURCES, MEMORY, ADR-013 in DEVLOG.
+
+### Phase 16.1 — MCP endpoint wiring
+- Created `protocols/mcp/endpoints.py` — shared MCP URLs, ports, `MCP_HEALTH_TARGETS`.
+- Wired `cli/main.py` `_collect_status()`, `api/config.py`, `api/runtime.py`, agent default URLs, `examples/_demo_infra.py`.
+- Resilient `SupplyChainAgent.setup()` — no crash when `:8003` is down at A2A startup.
+- Docs sweep: PRD, VERIFICATION, SECURITY, PROTOCOLS, AGENTS, demo prerequisites.
+
 ---
 
 ## Dependencies Between Files
@@ -900,7 +926,7 @@ examples/synthesis_demo.py
     -> protocols/a2a/server.py
     -> agents/market/agent.py -> protocols/mcp/client.py -> Rust MCP server :8001
     -> agents/geopolitical/agent.py -> services/llm.py
-    -> agents/supply_chain/agent.py -> services/llm.py
+    -> agents/supply_chain/agent.py -> protocols/mcp/client.py -> Rust MCP server :8003
     -> agents/research/agent.py -> protocols/mcp/client.py -> Rust MCP server :8002
   -> agents/synthesis/agent.py
     -> agents/synthesis/planner.py -> services/llm.py
@@ -997,7 +1023,8 @@ examples/taiwan_demo.py
   -> services/alerts.py (_evaluate_condition for demo alert)
   -> orchestration/graph.py (run_synthesis_graph)
   -> agents/geopolitical/agent.py -> memory/semantic.py (seed GDELT)
-  -> agents/supply_chain/agent.py -> memory/semantic.py (seed trade flow)
+  -> agents/supply_chain/agent.py -> protocols/mcp/client.py -> rust/mcp-trade :8003
+  -> agents/supply_chain/agent.py -> memory/semantic.py (comtrade_live cache)
   -> agents/market/agent.py -> MCP :8001
   -> agents/research/agent.py -> MCP :8002
   -> services/briefing.py (BriefingEngine)
@@ -1015,6 +1042,7 @@ examples/taiwan_demo.py
 | 11434 | Ollama | Required for Granite chat and embeddings |
 | 8001 | Rust `mcp-market-data` | Required for Market Agent |
 | 8002 | Rust `mcp-edgar` | Required for Research & Filing Agent |
+| 8003 | Rust `mcp-trade` | Required for Supply Chain Agent |
 | 9001 | A2A Market Agent | Started by demos |
 | 9002 | A2A Geopolitical Agent | Started by demos |
 | 9003 | A2A Supply Chain Agent | Started by demos |
@@ -1028,7 +1056,6 @@ examples/taiwan_demo.py
 ## What's Stubbed / Not Yet Built
 
 - Geopolitical live GDELT MCP server not built; agent uses semantic memory seed + model knowledge.
-- Supply-chain live UN Comtrade MCP server not built; agent uses semantic memory seed + model knowledge.
-- Rust MCP servers built: `mcp-market-data`, `mcp-edgar`; future MCP servers remain unbuilt.
+- Rust MCP servers built: `mcp-market-data`, `mcp-edgar`, `mcp-trade`; future MCP servers remain unbuilt.
 
 `memory/` is no longer a stub as of Phase 5. `agents/research/` is no longer a stub as of Phase 6. `agents/guardian/` is no longer a stub as of Phase 7. `observability/` is no longer a stub as of Phase 10. `cli/` is no longer a stub as of Phase 11. `api/` + `web/` provide the graphical interface (replacing the Phase 12 Streamlit dashboard). `ingestion/` has `seed_loader.py` as of Phase 13 (Taiwan scenario); full live ingestion pipelines remain unbuilt.

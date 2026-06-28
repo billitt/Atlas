@@ -55,13 +55,43 @@ MCP servers, external APIs, seed data, and agent mappings.
 
 ---
 
+### mcp-trade (port 8003)
+
+| Property | Value |
+|----------|-------|
+| **Language** | Rust (Axum) |
+| **External API** | UN Comtrade API v1 (`comtradeapi.un.org`) |
+| **Auth** | `Ocp-Apim-Subscription-Key` header via `ATLAS_COMTRADE_API_KEY` (loaded from `.env` by dotenvy) |
+| **Rate limits** | ~250 ms delay between upstream calls; Comtrade free tier: 500 calls/day keyed, preview ≤500 records |
+| **Start** | `cd rust && cargo run -p mcp-trade` |
+
+**Tools:**
+
+| Tool | Input | Output |
+|------|-------|--------|
+| `get_trade_data` | `reporterCode`, `period`, optional `partnerCode`, `cmdCode`, `flowCode`, `maxRecords` | Trade rows (`count` + `data[]`) |
+| `get_tariffline` | Same | Tariff-line granularity rows |
+| `preview_trade` | Same | Keyless preview (≤500 records) |
+
+Keyed endpoints allow up to 100k records per call. When no key is set or the key is rejected (401), `get_trade_data` / `get_tariffline` transparently fall back to preview.
+
+**Used by:** Supply Chain Agent (`:9003`)
+
+**API endpoints:**
+
+- `https://comtradeapi.un.org/data/v1/get/{typeCode}/{freqCode}/{clCode}`
+- `https://comtradeapi.un.org/data/v1/getTariffline/{typeCode}/{freqCode}/{clCode}`
+- `https://comtradeapi.un.org/public/v1/preview/{typeCode}/{freqCode}/{clCode}`
+
+---
+
 ## Agent → Data Source Map
 
 | Agent | Live MCP | Semantic Memory | Model Knowledge |
 |-------|----------|-----------------|-----------------|
 | Market | `get_quote` (:8001) | Prior analyses, context | — |
 | Geopolitical | — (future GDELT MCP) | Seed GDELT events | Fallback with disclosure |
-| Supply Chain | — (future Comtrade MCP) | Seed trade flow | Fallback with disclosure |
+| Supply Chain | `get_trade_data`, `get_tariffline` (:8003) | Live Comtrade cache (`comtrade_live`) | — |
 | Research | EDGAR tools (:8002) | Ingested filing chunks | — |
 | Synthesis | — | Similar past briefings (episodic) | Planning + merge |
 | Guardian | — | — | Validation only |
@@ -75,8 +105,9 @@ Simulated data ingested via `ingestion/seed_loader.py` → ChromaDB semantic mem
 | File | Simulates | Category | Key entities |
 |------|-----------|----------|--------------|
 | `data/seed_data/taiwan_scenario.json` | GDELT conflict events | geopolitical | Taiwan, China, TSMC, ASML, South China Sea |
-| `data/seed_data/trade_flow_data.json` | UN Comtrade trade flows | supply_chain | EU/US chip dependency, Hsinchu chokepoint (90%) |
 | `data/seed_data/tsmc_filing_excerpt.txt` | TSMC 20-F risk factors | filing | Cross-strait exposure, diversification |
+
+Trade flow data is fetched live via `mcp-trade` (:8003) and cached in ChromaDB with `source=comtrade_live` — no trade-flow seed fixtures.
 
 **Loader API:**
 
@@ -105,7 +136,7 @@ Metadata on every document: `source`, `date`, `category`, `scenario_name=taiwan_
 
 ## Known Limitations
 
-- Geopolitical and Supply Chain agents use **simulated seed data**, not live GDELT or Comtrade feeds
+- Geopolitical agent uses **simulated GDELT seed data** until a live GDELT MCP is built; Supply Chain agent uses **live UN Comtrade** via `mcp-trade` with ChromaDB cache fallback
 - Yahoo Finance API is unofficial and may rate-limit or change without notice
 - SEC EDGAR requires compliant User-Agent; bulk scraping beyond demo scale needs additional infrastructure
 - All inference is **single-GPU serialized** through Ollama — concurrent agent calls queue

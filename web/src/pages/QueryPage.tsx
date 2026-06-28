@@ -52,7 +52,7 @@ export function QueryPage() {
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-6">
-      <h1 className="text-2xl font-semibold tracking-tight">Query</h1>
+      <h1 className="text-2xl font-semibold tracking-tight">Query Atlas</h1>
       <p className="atlas-page-caption">
       Global business intelligence built to be audited: ask, watch the reasoning, verify the sources.
       </p>

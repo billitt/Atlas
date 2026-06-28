@@ -15,8 +15,7 @@ import typer
 from sqlmodel import Session, select
 
 from agents.guardian.agent import GuardianAgent
-from agents.market.agent import DEFAULT_MCP_URL
-from agents.research.agent import DEFAULT_EDGAR_MCP_URL
+from protocols.mcp.endpoints import MCP_HEALTH_TARGETS, mcp_edgar_url, mcp_market_url
 from agents.synthesis.agent import SynthesisAgent
 from cli.formatters import (
     format_alert,
@@ -136,10 +135,7 @@ def _collect_status() -> JsonDict:
         models = []
 
     mcp_servers = []
-    for name, url in (
-        ("mcp-market-data", DEFAULT_MCP_URL),
-        ("mcp-edgar", DEFAULT_EDGAR_MCP_URL),
-    ):
+    for name, url in MCP_HEALTH_TARGETS:
         reachable = False
         try:
             with httpx.Client(timeout=2.0, headers=auth_headers(mcp_auth_token())) as client:
@@ -237,8 +233,8 @@ def _build_alert_engine() -> AlertEngine:
         episodic_memory=episodic_memory,
         guardian=GuardianAgent(),
         mcp_client={
-            "market": McpClient(DEFAULT_MCP_URL),
-            "edgar": McpClient(DEFAULT_EDGAR_MCP_URL),
+            "market": McpClient(mcp_market_url()),
+            "edgar": McpClient(mcp_edgar_url()),
         },
     )
     for rule in default_alert_rules():

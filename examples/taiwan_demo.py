@@ -114,7 +114,7 @@ async def run() -> None:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
     print("Atlas Taiwan Strait Demo (Phase 13)")
-    print("Prerequisites: Ollama, MCP market :8001, MCP EDGAR :8002")
+    print("Prerequisites: Ollama, MCP market :8001, MCP EDGAR :8002, MCP trade :8003")
     print('Equivalent via CLI: atlas query "...Taiwan Strait..."')
     print("Equivalent via dashboard: Query page with the same question")
     print("-" * 80)

@@ -16,6 +16,7 @@ ollama pull granite-embedding:278m
 
 Terminal 1: `cd rust && cargo run -p mcp-market-data`  
 Terminal 2: `cd rust && cargo run -p mcp-edgar`  
+Terminal 3: `cd rust && cargo run -p mcp-trade` (optional `ATLAS_COMTRADE_API_KEY` in `.env`)  
 Ollama must be running.
 
 ---
@@ -56,6 +57,7 @@ When everything is running, expect:
 - Ollama: reachable, Granite model listed
 - MCP market `:8001`: healthy
 - MCP EDGAR `:8002`: healthy
+- MCP trade `:8003`: healthy (or reported down if server not started)
 - Semantic memory: document count ≥ 0
 - Episodic memory: briefing/alert counts
 - Last briefing/alert timestamps (if any prior runs)
@@ -121,11 +123,11 @@ Expected shapes: [../data/sample_scenarios/taiwan_demo_expected_output.md](../da
 
 ## Security Smoke Tests (Phase 15)
 
-With MCP servers running (`cargo run -p mcp-market-data`, `cargo run -p mcp-edgar`):
+With MCP servers running (`cargo run -p mcp-market-data`, `cargo run -p mcp-edgar`, `cargo run -p mcp-trade`):
 
 | Check | Command / action | Expected |
 |-------|------------------|----------|
-| Localhost bind | `netstat -an \| findstr "8001 8002"` | `LISTENING` on `127.0.0.1:8001` and `127.0.0.1:8002` |
+| Localhost bind | `netstat -an \| findstr "8001 8002 8003"` | `LISTENING` on `127.0.0.1:8001`, `:8002`, `:8003` |
 | Default auth off | `curl http://127.0.0.1:8001/health` | `{"status":"ok"}` |
 | Auth enabled | Set `ATLAS_MCP_AUTH_TOKEN=test` and restart MCP; `curl` without header | HTTP 401 |
 | Auth client | Same env; `McpClient` with matching token in `.env` | `initialize()` succeeds |
@@ -145,7 +147,7 @@ See [SECURITY.md](SECURITY.md) for configuration details.
 | **Single GPU serialization** | Ollama processes one Granite request at a time; multi-agent demos queue LLM calls |
 | **16 GB RAM constraint** | Granite 4.1 8B Q4 (~5.3 GB VRAM) + ChromaDB + agents fit consumer hardware; tight on 8 GB systems |
 | **Simulated geopolitical data** | GDELT-style seed in ChromaDB; no live GDELT MCP |
-| **Simulated supply chain data** | UN Comtrade-style seed; no live trade MCP |
+| **Comtrade API key optional** | `mcp-trade` preview mode caps at 500 records without `ATLAS_COMTRADE_API_KEY` |
 | **Yahoo unofficial API** | Market quotes depend on Yahoo chart endpoint stability |
 | **SEC rate limits** | 125 ms delay per EDGAR call; bulk ingestion is slow |
 | **No cloud fallback** | All inference is on-prem; no API keys or cloud LLM |

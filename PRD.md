@@ -2,7 +2,7 @@
 
 **Atlas** is a global business intelligence system powered by autonomous AI agents that communicate via industry-standard protocols. This document is the current plan and master reference point. Nothing here is sacred except the core goal.
 
-**Status (May 2026):** Phases **0–15 are complete**. All core pipelines are implemented and demo-verified. See [README.md](README.md) for quick start and [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md) for the Taiwan Strait interview walkthrough.
+**Status (June 2026):** Phases **0–16 are complete**. All core pipelines are implemented and demo-verified. See [README.md](README.md) for quick start and [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md) for the Taiwan Strait interview walkthrough.
 
 ---
 
@@ -145,8 +145,8 @@ No agent passes output downstream without first critiquing its own work. The Gua
 **Supply Chain & Trade Agent**
 
 - Domain: Global trade flows, tariffs, shipping disruptions, commodity dependencies
-- **As built:** Semantic memory seed data (simulated UN Comtrade trade flows) + Granite model knowledge with explicit limitation disclosure
-- **Planned MCP servers:** UN Comtrade, WTO datasets, BIS, USITC, port/shipping open data
+- **As built MCP:** UN Comtrade via `mcp-trade` (:8003) — `get_trade_data`, `get_tariffline`, `preview_trade`; results cached in ChromaDB (`source=comtrade_live`)
+- **Planned MCP servers:** WTO datasets, BIS, USITC, port/shipping open data
 - Capabilities: Dependency graph construction, tariff impact modeling, disruption detection, chokepoint identification
 - Reflection: Validates trade flow data against multiple sources, checks for data lag, confirms causal chains before asserting disruption impact
 - A2A Agent Card: Advertises `dependency_map`, `disruption_alert`, `tariff_impact`
@@ -228,10 +228,10 @@ The end-to-end demo walks through a single compelling scenario that exercises ev
 
 **Trigger:** Taiwan Strait tensions spike (simulated via seed data in `data/seed_data/` → ChromaDB semantic memory)
 
-1. **Seed loader** ingests GDELT-style events, trade-flow data, and TSMC filing excerpt into semantic memory
+1. **Seed loader** ingests GDELT-style events and TSMC filing excerpt into semantic memory
 2. **Alert fires** — `taiwan_strait_tension` rule evaluates seed aggregate metrics (HIGH severity)
 3. **Geopolitical Risk Agent** queries semantic memory for GDELT-style seed context → self-reflects → publishes via A2A
-4. **Supply Chain Agent** queries semantic memory for trade-flow / chokepoint seed data → publishes via A2A
+4. **Supply Chain Agent** fetches live UN Comtrade data via `mcp-trade` (:8003), caches rows in semantic memory → publishes via A2A
 5. **Market Intelligence Agent** pulls live TSM quote from Yahoo Finance via `mcp-market-data` MCP → publishes via A2A
 6. **Research Agent** pulls TSMC filings from EDGAR via `mcp-edgar` MCP → publishes via A2A
 7. **Synthesis Agent** collects outputs → generates unified briefing → Guardian validates with confidence levels
@@ -244,7 +244,7 @@ An interviewer watching this demo sees: protocol-native architecture (MCP + A2A)
 
 ## Data Sources (Open & Free)
 
-Live data adapters are **Rust MCP servers**. Geopolitical and trade data for the Taiwan demo use **seed files** ingested into semantic memory until dedicated MCP servers are built.
+Live data adapters are **Rust MCP servers**. Geopolitical data for the Taiwan demo uses **GDELT-style seed files** ingested into semantic memory until a dedicated GDELT MCP is built.
 
 ### Implemented
 
@@ -252,16 +252,18 @@ Live data adapters are **Rust MCP servers**. Geopolitical and trade data for the
 |----------|-------------------|------|---------|
 | Financial markets | `mcp-market-data` | 8001 | Yahoo Finance (`get_quote`) |
 | Corporate filings | `mcp-edgar` | 8002 | SEC EDGAR submissions, filing text, full-text search |
+| Trade & supply chain | `mcp-trade` | 8003 | UN Comtrade (`get_trade_data`, `get_tariffline`, `preview_trade`) |
+
+Optional `ATLAS_COMTRADE_API_KEY` in `.env` enables full Comtrade API access (100k record cap); without a key, `preview_trade` returns up to 500 records.
 
 ### Demo seed data (semantic memory)
 
 | File | Simulates | Used by |
 |------|-----------|---------|
 | `data/seed_data/taiwan_scenario.json` | GDELT-style conflict events | Geopolitical Agent, alerts |
-| `data/seed_data/trade_flow_data.json` | UN Comtrade trade flows | Supply Chain Agent |
 | `data/seed_data/tsmc_filing_excerpt.txt` | TSMC 20-F risk factors | Research Agent (supplement) |
 
-Loaded via `ingestion/seed_loader.py` → `load_taiwan_scenario()`.
+Loaded via `ingestion/seed_loader.py` → `load_taiwan_scenario()`. Supply Chain Agent does **not** use trade-flow seed fixtures — it uses live Comtrade MCP + cache.
 
 ### Planned (not yet built)
 
@@ -269,7 +271,6 @@ Loaded via `ingestion/seed_loader.py` → `load_taiwan_scenario()`.
 |----------|------------|---------|
 | Geopolitical events | `mcp-geopolitical` | GDELT, ACLED, RSS feeds |
 | Government / policy | `mcp-gov` | UN, WTO, government press releases |
-| Trade & supply chain | `mcp-trade` | UN Comtrade, WTO, BIS, USITC |
 | Macro indicators | `mcp-macro` | World Bank, IMF, OECD, BLS |
 
 All sources must be publicly accessible with no API key required, or free-tier API keys only.
@@ -323,7 +324,7 @@ The Carbon web dashboard includes an **execution trace view** where the user can
 
 ```text
 atlas/
-├── rust/                    ← Rust workspace: ollama-check, mcp-market-data, mcp-edgar
+├── rust/                    ← Rust workspace: ollama-check, mcp-market-data, mcp-edgar, mcp-trade
 ├── agents/                  ← Specialist agents + Agent Cards (market, geopolitical, supply_chain, research, synthesis, guardian)
 ├── protocols/               ← MCP client + A2A server/client/discovery
 ├── orchestration/           ← LangGraph graph.py, state.py
@@ -347,13 +348,13 @@ atlas/
 └── CLAUDE.md
 ```
 
-**Planned but not built:** additional Rust MCP crates (`mcp-geopolitical`, `mcp-trade`, `mcp-macro`, `mcp-gov`), full live ingestion pipeline, `compose.yml`.
+**Planned but not built:** additional Rust MCP crates (`mcp-geopolitical`, `mcp-macro`, `mcp-gov`), full live ingestion pipeline, `compose.yml`.
 
 ---
 
 ## Build Phases
 
-All phases **0–15 are complete** (May 2026).
+All phases **0–16 are complete** (June 2026).
 
 | Phase | Status | Focus | Outcome | Key Decisions |
 |-------|--------|-------|---------|---------------|
@@ -373,6 +374,9 @@ All phases **0–15 are complete** (May 2026).
 | 12 | ✅ | Web dashboard | Carbon UI + FastAPI API (5 pages) | |
 | 13 | ✅ | Demo scenario | Taiwan Strait end-to-end: seed data, `atlas-taiwan-demo`, DEMO_SCRIPT | |
 | 14 | ✅ | Polish & presentation | Docs set, README, ruff/clippy cleanup, VERIFICATION checklist | ADR-011: Doc structure |
+| 15 | ✅ | Security hardening | Localhost bind, optional MCP/A2A auth, rate limits, TLS | ADR-012 |
+| 16 | ✅ | UN Comtrade MCP | `mcp-trade` on :8003, live SupplyChainAgent + ChromaDB cache | ADR-013 |
+| 16.1 | ✅ | MCP wiring | `protocols/mcp/endpoints.py`, status/API prerequisites, resilient supply-chain setup | |
 
 Phases are sequential by default but can be reordered if priorities shift. Each phase produces something runnable and testable — no big-bang integration at the end.
 

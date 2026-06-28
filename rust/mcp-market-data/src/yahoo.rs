@@ -273,6 +273,8 @@ mod tests {
             .regular_market_price
             .ok_or_else(|| format!("missing regularMarketPrice for 'AAPL'"));
         assert!(price_err.is_err());
-        assert!(price_err.unwrap_err().contains("missing regularMarketPrice"));
+        assert!(price_err
+            .unwrap_err()
+            .contains("missing regularMarketPrice"));
     }
 }

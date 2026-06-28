@@ -11,9 +11,10 @@ from agents.formatting import MARKDOWN_FORMAT_INSTRUCTIONS
 from agents.research import tools as research_tools
 from memory.semantic import SemanticMemory
 from protocols.mcp.client import McpClient
+from protocols.mcp.endpoints import mcp_edgar_url
 from services.llm import chat
 
-DEFAULT_EDGAR_MCP_URL = "http://localhost:8002"
+DEFAULT_EDGAR_MCP_URL = mcp_edgar_url()
 
 
 class ResearchFilingAgent(BaseAgent):

@@ -72,6 +72,18 @@ Returns text content block with price, change %, volume vs 5-day average.
 
 SEC compliance: every request includes `User-Agent: Atlas-MCP/0.1 (...)` and 125 ms delay between calls.
 
+### mcp-trade (:8003)
+
+**Tools:**
+
+| Tool | Arguments | Returns |
+|------|-----------|---------|
+| `get_trade_data` | `reporterCode`, `period`, optional `partnerCode`, `cmdCode`, `flowCode` | UN Comtrade trade rows |
+| `get_tariffline` | Same | Tariff-line granularity rows |
+| `preview_trade` | Same | Keyless preview (max 500 records) |
+
+Keyed calls use `ATLAS_COMTRADE_API_KEY`; 250 ms delay between upstream calls. Falls back to preview when key is absent or rejected.
+
 ### Security (Phase 15)
 
 Shared middleware in `rust/mcp-common/`:

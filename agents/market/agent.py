@@ -13,9 +13,10 @@ from agents.market import tools as market_tools
 from memory.episodic import EpisodicMemory
 from memory.semantic import SemanticMemory
 from protocols.mcp.client import McpClient
+from protocols.mcp.endpoints import mcp_market_url
 from services.llm import chat
 
-DEFAULT_MCP_URL = "http://localhost:8001"
+DEFAULT_MCP_URL = mcp_market_url()
 
 
 def _parse_json_from_llm(text: str) -> dict[str, Any]:

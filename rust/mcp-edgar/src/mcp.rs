@@ -135,19 +135,15 @@ async fn handle_tools_call(
             if ticker.is_none() && cik.is_none() {
                 return Err((-32602, "company_filings requires ticker or cik".into()));
             }
-            company_filings(
-                &state.http,
-                ticker.as_deref(),
-                cik.as_deref(),
-            )
-            .await
-            .map(|filings| json!({ "filings": filings }))
+            company_filings(&state.http, ticker.as_deref(), cik.as_deref())
+                .await
+                .map(|filings| json!({ "filings": filings }))
         }
         "filing_text" => {
             let accession = validate_accession_number(required_str(&args, "accession_number")?)
                 .map_err(|message| (-32602, message))?;
-            let cik = validate_cik(required_str(&args, "cik")?)
-                .map_err(|message| (-32602, message))?;
+            let cik =
+                validate_cik(required_str(&args, "cik")?).map_err(|message| (-32602, message))?;
             filing_text(&state.http, &cik, &accession)
                 .await
                 .map(|text| json!({ "cik": cik, "accession_number": accession, "text": text }))
@@ -156,11 +152,15 @@ async fn handle_tools_call(
             let query = validate_search_query(required_str(&args, "query")?)
                 .map_err(|message| (-32602, message))?;
             let form_type = match args.get("form_type").and_then(Value::as_str) {
-                Some(value) => Some(validate_form_type(value).map_err(|message| (-32602, message))?),
+                Some(value) => {
+                    Some(validate_form_type(value).map_err(|message| (-32602, message))?)
+                }
                 None => None,
             };
             let date_from = match args.get("date_from").and_then(Value::as_str) {
-                Some(value) => Some(validate_date_from(value).map_err(|message| (-32602, message))?),
+                Some(value) => {
+                    Some(validate_date_from(value).map_err(|message| (-32602, message))?)
+                }
                 None => None,
             };
             full_text_search(

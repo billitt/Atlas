@@ -888,3 +888,59 @@ python -m examples.synthesis_demo
 
 The Phase 12 Streamlit dashboard (`ui/`, `atlas-dashboard`) was removed after the Carbon React UI (`web/`) and FastAPI API (`api/`, `atlas-api`) were verified. The graphical interface is now `web/` + `api/` only; CLI unchanged.
 
+---
+
+## Phase 16 — UN Comtrade MCP + live SupplyChainAgent
+
+**Goal:** Live UN Comtrade trade data for Supply Chain Agent; ChromaDB as cache; remove hard-coded trade-flow seed fixtures.
+
+### Added
+
+| Path | Purpose |
+|------|---------|
+| `rust/mcp-trade/` | UN Comtrade MCP server on `:8003` (dotenvy, keyed + preview fallback) |
+| `agents/supply_chain/tools.py` | MCP helpers for Comtrade tools |
+| `tests/agents/test_supply_chain.py` | Live / cache / insufficient-data tests |
+
+### Changed
+
+- `agents/supply_chain/agent.py` — live-first Comtrade fetch, ChromaDB cache, honest insufficient-data path
+- `ingestion/seed_loader.py` — removed `trade_flow_data.json` ingestion; GDELT seed untouched
+- `examples/_demo_infra.py` — `:8003` MCP health check, SupplyChainAgent with McpClient
+- `rust/mcp-common/src/validation.rs` — Comtrade param validators
+- `.env.example` — `ATLAS_COMTRADE_API_KEY`
+
+---
+
+## ADR-013: Live UN Comtrade MCP; semantic cache fallback
+
+**Status:** Accepted (Phase 16)
+
+**Context:** Supply Chain Agent relied on simulated `trade_flow_data.json` seed fixtures. Portfolio demos need live data grounding without inventing trade figures.
+
+**Decision:**
+
+- **Live-first** — SupplyChainAgent calls `mcp-trade` (:8003) for UN Comtrade data; ChromaDB caches successful fetches with `source=comtrade_live`.
+- **Cache fallback** — on MCP failure, query cached `comtrade_live` rows; downgrade confidence and disclose staleness.
+- **No fabricated figures** — if live + cache empty, return LOW confidence with explicit data gap; LLM must not compute trade numbers.
+- **dotenvy in Rust** — `mcp-trade` loads `ATLAS_COMTRADE_API_KEY` from repo-root `.env` (Python uses python-dotenv separately).
+- **Preview fallback** — keyless or rejected key routes to Comtrade preview API (500-record cap).
+
+**Consequences:**
+
+- Trade-flow seed fixtures removed from `seed_loader.py`; geopolitical GDELT seed unchanged.
+- Demos require `cargo run -p mcp-trade` alongside market-data and edgar servers.
+
+---
+
+## Phase 16.1 — MCP endpoint wiring (2026-06-28)
+
+**Problem:** `atlas status` and API readiness only checked `:8001`/`:8002`; Supply Chain Agent hard-failed A2A startup when `:8003` was down.
+
+**Changes:**
+
+- `protocols/mcp/endpoints.py` — single registry for MCP URLs, ports, and health targets
+- `cli/main.py`, `api/config.py`, `api/runtime.py` — all three MCP servers in status/prerequisites
+- Agent default URLs and `examples/_demo_infra.py` — consume endpoint helpers
+- `SupplyChainAgent.setup()` — resilient try/except; server starts without Comtrade MCP
+

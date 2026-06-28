@@ -24,7 +24,7 @@ async def run() -> None:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
     print("Atlas Briefing Demo (Phase 8)")
-    print("Prerequisites: Ollama running, MCP market :8001, MCP EDGAR :8002")
+    print("Prerequisites: Ollama running, MCP market :8001, MCP EDGAR :8002, MCP trade :8003")
     print("This default watchlist run may take several minutes.")
     print("-" * 80)
 

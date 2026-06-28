@@ -7,13 +7,14 @@ Reference for interview walkthrough. Actual LLM text varies; structure and data 
 - Ollama running with `ibm/granite4.1:8b` and `granite-embedding:278m`
 - `cargo run -p mcp-market-data` on `:8001`
 - `cargo run -p mcp-edgar` on `:8002`
+- `cargo run -p mcp-trade` on `:8003` (optional `ATLAS_COMTRADE_API_KEY` in `.env`)
 
 ## Step 1 — Seed ingestion
 
 ```
 [Step 1] Seed data ingestion
-[seed_loader] Ingested 12 seed documents (N total chunks in semantic memory)
-Ingested 12 documents into semantic memory
+[seed_loader] Ingested 7 seed documents (N total chunks in semantic memory)
+Ingested 7 documents into semantic memory
 ```
 
 Documents ingested:
@@ -23,8 +24,8 @@ Documents ingested:
 | `taiwan-gdelt-*` | `seed_gdelt` | geopolitical |
 | `taiwan-gdelt-aggregate` | `seed_gdelt` | geopolitical |
 | `taiwan-tsmc-filing-excerpt` | `seed_sec_filing` | filing |
-| `taiwan-trade-flow` | `seed_comtrade` | supply_chain |
-| `taiwan-chokepoint-*` | `seed_comtrade` | supply_chain |
+
+Supply Chain Agent uses live Comtrade via `mcp-trade` (:8003); cached rows appear as `source=comtrade_live` after a successful query.
 
 ## Step 2 — Alert (HIGH severity)
 
@@ -112,7 +113,7 @@ Span count typically **25–60** depending on retries and MCP latency.
 ================================================================
 Protocols: MCP (mcp-market-data :8001, mcp-edgar :8002), A2A (4 specialist agents)
 Agents: Market, Geopolitical, Supply Chain, Research, Synthesis, Guardian
-Memory: Semantic (seed GDELT/trade/filing), Episodic (briefing + alert logged)
+Memory: Semantic (seed GDELT/filing + live Comtrade cache), Episodic (briefing + alert logged)
 Interaction: Alert fired, Query answered, Briefing generated
 Observability: trace_id=... spans=N query=...s total=...s
 Architecture: Rust MCP data layer + Python intelligence layer + LangGraph orchestration

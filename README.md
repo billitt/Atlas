@@ -12,6 +12,7 @@ python -m venv .venv && .\.venv\Scripts\Activate.ps1 && pip install -e ".[dev]"
 ollama pull ibm/granite4.1:8b
 # Terminal A: cd rust && cargo run -p mcp-market-data
 # Terminal B: cd rust && cargo run -p mcp-edgar
+# Terminal C: cd rust && cargo run -p mcp-trade
 atlas-taiwan-demo
 ```
 
@@ -78,7 +79,7 @@ atlas/
 ├── ingestion/        # Seed data loader (Taiwan scenario)
 ├── observability/    # OpenTelemetry tracing, run logger, trace reader
 ├── examples/         # Demos including `taiwan_demo.py` and shared `_demo_infra.py`
-├── rust/             # MCP servers: mcp-market-data, mcp-edgar, ollama-check
+├── rust/             # MCP servers: mcp-market-data, mcp-edgar, mcp-trade, ollama-check
 ├── data/
 │   ├── seed_data/    # Taiwan Strait demo seed files
 │   └── sample_scenarios/  # Expected demo output reference
@@ -116,7 +117,7 @@ User (CLI / Carbon web UI / demos)
   -> LangGraph: plan -> delegate -> synthesize -> guardian
   -> Market :9001 -> MCP :8001 -> Yahoo Finance
   -> Geopolitical :9002 -> semantic memory (seed GDELT)
-  -> Supply Chain :9003 -> semantic memory (seed trade flow)
+  -> Supply Chain :9003 -> MCP :8003 (UN Comtrade) + ChromaDB cache
   -> Research :9004 -> MCP :8002 -> SEC EDGAR
   -> ChromaDB + SQLite memory
   -> OpenTelemetry traces + run logs
@@ -133,6 +134,7 @@ Full diagram: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 | Ollama | `11434` | `ollama serve` |
 | MCP market data | `8001` | `cargo run -p mcp-market-data` |
 | MCP EDGAR | `8002` | `cargo run -p mcp-edgar` |
+| MCP trade (UN Comtrade) | `8003` | `cargo run -p mcp-trade` |
 | A2A agents | `9001`–`9004` | Auto-started by CLI/API/demos |
 | Atlas API | `8787` | `atlas-api` |
 | Vite dev UI | `5173` | `cd web && npm run dev` |
@@ -157,7 +159,10 @@ python -m venv .venv
 pip install -e ".[dev]"
 ollama pull ibm/granite4.1:8b
 ollama pull granite-embedding:278m
+copy .env.example .env   # set ATLAS_COMTRADE_API_KEY for keyed Comtrade (optional)
 ```
+
+Set `ATLAS_COMTRADE_API_KEY` in `.env` for full Comtrade access (100k records/call). The Rust `mcp-trade` server loads this via `dotenvy`; blank falls back to keyless preview (500 records).
 
 ### Verify
 
@@ -253,6 +258,6 @@ Licensed under the MIT License — see [LICENSE](LICENSE).
 
 ## Notes
 
-- Geopolitical and Supply Chain agents use seed data in semantic memory; live MCP feeds are future work.
+- Supply Chain Agent fetches live UN Comtrade data via `mcp-trade` (:8003) with ChromaDB cache fallback; geopolitical agent uses GDELT seed data in semantic memory until a live GDELT MCP is built.
 - Rust MCP servers must run before queries requiring live market or filing data.
 - Verification checklist: [docs/VERIFICATION.md](docs/VERIFICATION.md)

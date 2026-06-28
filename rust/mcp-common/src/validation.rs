@@ -15,6 +15,20 @@ static DATE_RE: LazyLock<regex::Regex> =
     LazyLock::new(|| regex::Regex::new(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}$").expect("valid date regex"));
 static FORM_TYPE_RE: LazyLock<regex::Regex> =
     LazyLock::new(|| regex::Regex::new(r"^[A-Za-z0-9\-/]{1,20}$").expect("valid form type regex"));
+static M49_RE: LazyLock<regex::Regex> =
+    LazyLock::new(|| regex::Regex::new(r"^[0-9]{1,3}$").expect("valid m49 regex"));
+static PERIOD_RE: LazyLock<regex::Regex> =
+    LazyLock::new(|| regex::Regex::new(r"^[0-9]{4}([0-9]{2})?$").expect("valid period regex"));
+static CMD_CODE_RE: LazyLock<regex::Regex> =
+    LazyLock::new(|| regex::Regex::new(r"^[A-Za-z0-9*\-,]{1,20}$").expect("valid cmd code regex"));
+static FLOW_CODE_RE: LazyLock<regex::Regex> =
+    LazyLock::new(|| regex::Regex::new(r"^[A-Za-z]{1,2}$").expect("valid flow code regex"));
+static TYPE_CODE_RE: LazyLock<regex::Regex> =
+    LazyLock::new(|| regex::Regex::new(r"^[A-Za-z]{1,2}$").expect("valid type code regex"));
+static FREQ_CODE_RE: LazyLock<regex::Regex> =
+    LazyLock::new(|| regex::Regex::new(r"^[A-Za-z]{1,2}$").expect("valid freq code regex"));
+static CLASSIFICATION_RE: LazyLock<regex::Regex> =
+    LazyLock::new(|| regex::Regex::new(r"^[A-Za-z0-9]{1,6}$").expect("valid classification regex"));
 
 /// Validate a stock ticker symbol for Yahoo Finance requests.
 pub fn validate_symbol(symbol: &str) -> Result<String, String> {
@@ -111,6 +125,92 @@ pub fn validate_date_from(date_from: &str) -> Result<String, String> {
     Ok(trimmed.to_string())
 }
 
+/// Validate a UN M49 numeric country/region code (1-3 digits).
+pub fn validate_m49_code(code: &str) -> Result<String, String> {
+    let trimmed = code.trim();
+    if trimmed.is_empty() {
+        return Err("reporterCode must not be empty".into());
+    }
+    if !M49_RE.is_match(trimmed) {
+        return Err(format!("invalid M49 code '{trimmed}': use 1-3 digits"));
+    }
+    Ok(trimmed.to_string())
+}
+
+/// Validate a Comtrade period (`yyyy` or `yyyymm`).
+pub fn validate_period(period: &str) -> Result<String, String> {
+    let trimmed = period.trim();
+    if trimmed.is_empty() {
+        return Err("period must not be empty".into());
+    }
+    if !PERIOD_RE.is_match(trimmed) {
+        return Err(format!(
+            "invalid period '{trimmed}': expected yyyy or yyyymm"
+        ));
+    }
+    Ok(trimmed.to_string())
+}
+
+/// Validate a Comtrade commodity code (HS digits, TOTAL, wildcards).
+pub fn validate_cmd_code(cmd_code: &str) -> Result<String, String> {
+    let trimmed = cmd_code.trim();
+    if trimmed.is_empty() {
+        return Err("cmdCode must not be empty".into());
+    }
+    if !CMD_CODE_RE.is_match(trimmed) {
+        return Err(format!("invalid cmdCode '{trimmed}'"));
+    }
+    Ok(trimmed.to_string())
+}
+
+/// Validate a Comtrade flow code (M, X, RM, RX, etc.).
+pub fn validate_flow_code(flow_code: &str) -> Result<String, String> {
+    let trimmed = flow_code.trim();
+    if trimmed.is_empty() {
+        return Err("flowCode must not be empty".into());
+    }
+    if !FLOW_CODE_RE.is_match(trimmed) {
+        return Err(format!("invalid flowCode '{trimmed}'"));
+    }
+    Ok(trimmed.to_uppercase())
+}
+
+/// Validate a Comtrade type code (e.g. C for goods, S for services).
+pub fn validate_type_code(type_code: &str) -> Result<String, String> {
+    let trimmed = type_code.trim();
+    if trimmed.is_empty() {
+        return Err("typeCode must not be empty".into());
+    }
+    if !TYPE_CODE_RE.is_match(trimmed) {
+        return Err(format!("invalid typeCode '{trimmed}'"));
+    }
+    Ok(trimmed.to_uppercase())
+}
+
+/// Validate a Comtrade frequency code (A, M, Q).
+pub fn validate_freq_code(freq_code: &str) -> Result<String, String> {
+    let trimmed = freq_code.trim();
+    if trimmed.is_empty() {
+        return Err("freqCode must not be empty".into());
+    }
+    if !FREQ_CODE_RE.is_match(trimmed) {
+        return Err(format!("invalid freqCode '{trimmed}'"));
+    }
+    Ok(trimmed.to_uppercase())
+}
+
+/// Validate a Comtrade classification code (HS, SITC, BEC).
+pub fn validate_classification(cl_code: &str) -> Result<String, String> {
+    let trimmed = cl_code.trim();
+    if trimmed.is_empty() {
+        return Err("clCode must not be empty".into());
+    }
+    if !CLASSIFICATION_RE.is_match(trimmed) {
+        return Err(format!("invalid clCode '{trimmed}'"));
+    }
+    Ok(trimmed.to_uppercase())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -164,13 +264,7 @@ mod tests {
 
     #[test]
     fn rejects_ticker_attack_patterns() {
-        for bad in [
-            "'; DROP TABLE--",
-            "../../etc",
-            "ABCDEFGHIJK",
-            "TSM©",
-            "",
-        ] {
+        for bad in ["'; DROP TABLE--", "../../etc", "ABCDEFGHIJK", "TSM©", ""] {
             assert!(validate_ticker(bad).is_err(), "expected reject for {bad:?}");
         }
     }
@@ -233,5 +327,25 @@ mod tests {
     #[test]
     fn accepts_valid_date_from() {
         assert_eq!(validate_date_from("2024-01-15").unwrap(), "2024-01-15");
+    }
+
+    #[test]
+    fn accepts_valid_comtrade_codes() {
+        assert_eq!(validate_m49_code("842").unwrap(), "842");
+        assert_eq!(validate_period("2022").unwrap(), "2022");
+        assert_eq!(validate_period("202201").unwrap(), "202201");
+        assert_eq!(validate_cmd_code("8542").unwrap(), "8542");
+        assert_eq!(validate_flow_code("m").unwrap(), "M");
+        assert_eq!(validate_type_code("c").unwrap(), "C");
+        assert_eq!(validate_freq_code("a").unwrap(), "A");
+        assert_eq!(validate_classification("hs").unwrap(), "HS");
+    }
+
+    #[test]
+    fn rejects_invalid_comtrade_codes() {
+        assert!(validate_m49_code("abc").is_err());
+        assert!(validate_period("22").is_err());
+        assert!(validate_cmd_code("").is_err());
+        assert!(validate_flow_code("IMPORT").is_err());
     }
 }

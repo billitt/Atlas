@@ -1,0 +1,20 @@
+[package]
+name = "mcp-trade"
+version = "0.1.0"
+edition = "2021"
+description = "Atlas MCP server for UN Comtrade trade data"
+
+[[bin]]
+name = "mcp-trade"
+path = "src/main.rs"
+
+[dependencies]
+mcp-common = { path = "../mcp-common" }
+axum = { version = "0.8", features = ["json"] }
+axum-server = { version = "0.8", features = ["tls-rustls"] }
+dotenvy = "0.15"
+reqwest = { version = "0.12", features = ["json"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+tower-http = { version = "0.6", features = ["cors"] }

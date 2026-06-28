@@ -57,6 +57,10 @@ def _check_prerequisites(
                     issues.append(
                         f"{name} down on {server.get('url')} — run: cargo run -p mcp-edgar"
                     )
+                elif "trade" in name:
+                    issues.append(
+                        f"{name} down on {server.get('url')} — run: cargo run -p mcp-trade"
+                    )
                 else:
                     issues.append(f"{name} down on {server.get('url')}")
 

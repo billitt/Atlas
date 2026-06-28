@@ -28,9 +28,8 @@ static RATE_LIMIT_RPS: LazyLock<Option<u32>> = LazyLock::new(|| {
         .filter(|value| *value > 0)
 });
 
-static IP_LIMITERS: LazyLock<Option<Arc<DashMap<IpAddr, DirectLimiter>>>> = LazyLock::new(|| {
-    RATE_LIMIT_RPS.is_some().then(|| Arc::new(DashMap::new()))
-});
+static IP_LIMITERS: LazyLock<Option<Arc<DashMap<IpAddr, DirectLimiter>>>> =
+    LazyLock::new(|| RATE_LIMIT_RPS.is_some().then(|| Arc::new(DashMap::new())));
 
 fn peer_ip(request: &Request<Body>) -> Option<IpAddr> {
     request

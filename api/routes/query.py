@@ -56,6 +56,7 @@ class QueryBody(BaseModel):
 _SEED_SOURCE_LABELS = {
     "seed_gdelt": "GDELT event",
     "seed_comtrade": "UN Comtrade trade flow",
+    "comtrade_live": "UN Comtrade (live)",
     "seed_sec_filing": "SEC filing excerpt",
     "sec_edgar": "SEC EDGAR filing",
 }

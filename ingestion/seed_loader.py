@@ -75,36 +75,6 @@ def _scenario_documents() -> tuple[list[str], list[JsonDict], list[str]]:
     )
     ids.append("taiwan-tsmc-filing-excerpt")
 
-    trade_path = SEED_DIR / "trade_flow_data.json"
-    trade = json.loads(_read_text(trade_path))
-    texts.append(json.dumps(trade, indent=2))
-    metadatas.append(
-        {
-            "source": "seed_comtrade",
-            "date": "2026-05-27",
-            "category": "supply_chain",
-            "scenario_name": SCENARIO_NAME,
-        }
-    )
-    ids.append("taiwan-trade-flow")
-
-    for index, choke in enumerate(trade.get("chokepoints") or []):
-        body = (
-            f"Supply chain chokepoint: {choke.get('name')}\n"
-            f"Share/role: {choke.get('share_of_global_advanced_chips_percent') or choke.get('role')}\n"
-            f"Impact: {choke.get('impact_if_disrupted')}"
-        )
-        texts.append(body)
-        metadatas.append(
-            {
-                "source": "seed_comtrade",
-                "date": "2026-05-27",
-                "category": "supply_chain",
-                "scenario_name": SCENARIO_NAME,
-            }
-        )
-        ids.append(f"taiwan-chokepoint-{index}")
-
     return texts, metadatas, ids
 
 
@@ -127,15 +97,12 @@ def load_taiwan_scenario(
 def seed_alert_context() -> JsonDict:
     """Return fresh-data-shaped payload from seed files for demo alert evaluation."""
     scenario = json.loads(_read_text(SEED_DIR / "taiwan_scenario.json"))
-    trade = json.loads(_read_text(SEED_DIR / "trade_flow_data.json"))
     return {
         "type": "geopolitical_seed",
         "scenario_name": SCENARIO_NAME,
         "aggregate_metrics": scenario.get("aggregate_metrics"),
         "events": scenario.get("events"),
-        "trade_dependency_summary": trade.get("dependency_summary"),
         "sources": [
             {"source": "seed_gdelt", "path": str(SEED_DIR / "taiwan_scenario.json")},
-            {"source": "seed_comtrade", "path": str(SEED_DIR / "trade_flow_data.json")},
         ],
     }

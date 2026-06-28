@@ -43,6 +43,7 @@ OLLAMA_PORT: int = int(os.getenv("OLLAMA_PORT", "11434"))
 # --- Rust MCP servers ---
 MCP_MARKET_PORT: int = int(os.getenv("ATLAS_MCP_MARKET_PORT", "8001"))
 MCP_EDGAR_PORT: int = int(os.getenv("ATLAS_MCP_EDGAR_PORT", "8002"))
+MCP_TRADE_PORT: int = int(os.getenv("ATLAS_MCP_TRADE_PORT", "8003"))
 
 # --- A2A specialist agents ---
 A2A_MARKET_PORT: int = 9001
@@ -95,6 +96,7 @@ SERVICE_ENDPOINTS: tuple[ServiceEndpoint, ...] = (
     _endpoint("ollama", OLLAMA_PORT, "ollama"),
     _endpoint("mcp-market-data", MCP_MARKET_PORT, "mcp", "ATLAS_MCP_AUTH_TOKEN"),
     _endpoint("mcp-edgar", MCP_EDGAR_PORT, "mcp", "ATLAS_MCP_AUTH_TOKEN"),
+    _endpoint("mcp-trade", MCP_TRADE_PORT, "mcp", "ATLAS_MCP_AUTH_TOKEN"),
     _endpoint("a2a-market", A2A_MARKET_PORT, "a2a", "ATLAS_A2A_AUTH_TOKEN"),
     _endpoint("a2a-geopolitical", A2A_GEOPOLITICAL_PORT, "a2a", "ATLAS_A2A_AUTH_TOKEN"),
     _endpoint("a2a-supply-chain", A2A_SUPPLY_CHAIN_PORT, "a2a", "ATLAS_A2A_AUTH_TOKEN"),
@@ -106,10 +108,11 @@ def api_token_configured() -> bool:
     return api_auth_token() is not None
 
 
-def mcp_urls() -> tuple[str, str]:
+def mcp_urls() -> tuple[str, str, str]:
     market = f"http://{BIND_HOST}:{MCP_MARKET_PORT}"
     edgar = f"http://{BIND_HOST}:{MCP_EDGAR_PORT}"
-    return market, edgar
+    trade = f"http://{BIND_HOST}:{MCP_TRADE_PORT}"
+    return market, edgar, trade
 
 
 def a2a_agent_urls() -> tuple[str, str, str, str]:
