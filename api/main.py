@@ -12,13 +12,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from api.config import API_PORT, BIND_HOST, DEV_FRONTEND_ORIGIN
-from api.runtime import boot_agent_runtime, shutdown_agent_servers
 from api.routes.agents import router as agents_router
 from api.routes.alerts import router as alerts_router
 from api.routes.briefings import router as briefings_router
 from api.routes.query import router as query_router
 from api.routes.status import router as status_router
 from api.routes.traces import router as traces_router
+from api.runtime import boot_agent_runtime, shutdown_agent_servers
+from api.static import mount_production_ui
 from observability.tracing import init_tracing, shutdown_tracing
 
 
@@ -49,13 +50,14 @@ def create_app(*, production: bool = False) -> FastAPI:
         redoc_url=None,
     )
 
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=[DEV_FRONTEND_ORIGIN],
-        allow_credentials=True,
-        allow_methods=["GET", "POST", "OPTIONS"],
-        allow_headers=["Authorization", "Content-Type"],
-    )
+    if not production:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=[DEV_FRONTEND_ORIGIN],
+            allow_credentials=True,
+            allow_methods=["GET", "POST", "OPTIONS"],
+            allow_headers=["Authorization", "Content-Type"],
+        )
 
     @app.exception_handler(HTTPException)
     async def http_exception_handler(_request: Request, exc: HTTPException) -> JSONResponse:
@@ -77,11 +79,10 @@ def create_app(*, production: bool = False) -> FastAPI:
     app.include_router(alerts_router, prefix="/api", tags=["alerts"])
     app.include_router(traces_router, prefix="/api", tags=["traces"])
 
-    static_dir = Path(__file__).resolve().parent.parent / "web" / "dist"
-    if production and static_dir.is_dir():
-        from fastapi.staticfiles import StaticFiles
-
-        app.mount("/", StaticFiles(directory=str(static_dir), html=True), name="static")
+    if production:
+        static_dir = Path(__file__).resolve().parent.parent / "web" / "dist"
+        if static_dir.is_dir():
+            mount_production_ui(app, static_dir)
 
     return app
 

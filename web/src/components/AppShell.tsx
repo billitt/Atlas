@@ -2,11 +2,15 @@ import {
   Content,
   Header,
   HeaderContainer,
+  HeaderGlobalAction,
   HeaderMenuItem,
   HeaderName,
   HeaderNavigation,
 } from "@carbon/react";
+import { Asleep, Light } from "@carbon/icons-react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
+
+import type { AtlasTheme } from "@/App";
 
 const NAV_ITEMS = [
   { label: "Query", path: "/" },
@@ -16,7 +20,12 @@ const NAV_ITEMS = [
   { label: "Trace Viewer", path: "/traces" },
 ] as const;
 
-export function AppShell() {
+interface AppShellProps {
+  theme: AtlasTheme;
+  onToggleTheme: () => void;
+}
+
+export function AppShell({ theme, onToggleTheme }: AppShellProps) {
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -28,7 +37,7 @@ export function AppShell() {
             <HeaderName href="/" prefix="">
               Atlas
             </HeaderName>
-            <HeaderNavigation aria-label="Atlas">
+            <HeaderNavigation aria-label="Primary navigation">
               {NAV_ITEMS.map((item) => (
                 <HeaderMenuItem
                   key={item.path}
@@ -39,8 +48,15 @@ export function AppShell() {
                 </HeaderMenuItem>
               ))}
             </HeaderNavigation>
+            <HeaderGlobalAction
+              aria-label={theme === "g100" ? "Switch to light theme" : "Switch to dark theme"}
+              onClick={onToggleTheme}
+              tooltipAlignment="end"
+            >
+              {theme === "g100" ? <Light size={20} /> : <Asleep size={20} />}
+            </HeaderGlobalAction>
           </Header>
-          <Content id="main-content">
+          <Content id="main-content" tabIndex={-1}>
             <Outlet />
           </Content>
         </>
