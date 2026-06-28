@@ -1,4 +1,4 @@
-"""Query streaming route — SSE from LangGraph astream_events."""
+"""Query streaming route — SSE from LangGraph astream (updates + custom)."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ from time import perf_counter
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from agents.guardian.agent import GuardianAgent
@@ -50,17 +51,6 @@ def _compact_specialist(result: JsonDict) -> JsonDict:
     }
 
 
-def _node_from_event(event: JsonDict) -> str | None:
-    metadata = event.get("metadata") or {}
-    node = metadata.get("langgraph_node")
-    if node:
-        return str(node)
-    name = event.get("name")
-    if name in {"plan", "delegate_to_agents", "synthesize", "guardian"}:
-        return str(name)
-    return None
-
-
 async def _stream_graph_events(
     app_graph: Any,
     initial_state: JsonDict,
@@ -69,71 +59,78 @@ async def _stream_graph_events(
     started_at: str,
     start_time: float,
 ):
-    """Yield SSE chunks from LangGraph astream_events."""
+    """Yield SSE chunks from LangGraph astream (stream_mode updates + custom).
+
+    ``stream_mode=["updates", "custom"]`` yields ``(mode, chunk)`` tuples:
+    - ``"custom"`` chunks carry per-agent specialist results emitted by
+      ``delegate_to_agents_node`` as each specialist completes.
+    - ``"updates"`` chunks are ``{node_name: state_delta}`` fired once per
+      graph super-step, providing deterministic node-level progress.
+    """
     accumulated: JsonDict = dict(initial_state)
     try:
         yield format_sse("started", {"query": query})
 
-        async for event in app_graph.astream_events(initial_state, version="v2"):
-            kind = event.get("event")
-            if kind != "on_chain_end":
+        async for mode, chunk in app_graph.astream(
+            initial_state, stream_mode=["updates", "custom"]
+        ):
+            if mode == "custom":
+                # Per-agent events emitted by the delegate node's stream writer.
+                if (
+                    isinstance(chunk, dict)
+                    and chunk.get("_atlas_type") == "specialist_result"
+                ):
+                    yield format_sse("specialist", _compact_specialist(chunk["result"]))
                 continue
 
-            node = _node_from_event(event)
-            if not node:
-                continue
+            # mode == "updates": chunk is {node_name: state_delta}
+            for node, output in chunk.items():
+                accumulated.update(output)
 
-            output = (event.get("data") or {}).get("output") or {}
-            accumulated.update(output)
+                if node == "plan":
+                    plan = output.get("plan") or {}
+                    yield format_sse(
+                        "plan",
+                        {
+                            "status": "complete",
+                            "step_count": len(plan.get("steps", [])),
+                        },
+                    )
 
-            if node == "plan":
-                plan = output.get("plan") or {}
-                yield format_sse(
-                    "plan",
-                    {
-                        "status": "complete",
-                        "step_count": len(plan.get("steps", [])),
-                    },
-                )
-                continue
+                elif node == "delegate_to_agents":
+                    # Specialist tiles were already sent as custom events above;
+                    # this marks the delegation phase as fully complete.
+                    agent_results = output.get("agent_results") or []
+                    yield format_sse(
+                        "delegate",
+                        {"status": "complete", "count": len(agent_results)},
+                    )
 
-            if node == "delegate_to_agents":
-                agent_results = output.get("agent_results") or []
-                for result in agent_results:
-                    yield format_sse("specialist", _compact_specialist(result))
-                yield format_sse(
-                    "delegate",
-                    {"status": "complete", "count": len(agent_results)},
-                )
-                continue
+                elif node == "synthesize":
+                    briefing = output.get("briefing") or {}
+                    yield format_sse(
+                        "synthesize",
+                        {
+                            "status": "complete",
+                            "combined_analysis": output.get("combined_analysis"),
+                            "confidence": output.get("confidence"),
+                            "sources": briefing.get("per_agent_sources", []),
+                        },
+                    )
 
-            if node == "synthesize":
-                briefing = output.get("briefing") or {}
-                yield format_sse(
-                    "synthesize",
-                    {
-                        "status": "complete",
-                        "combined_analysis": output.get("combined_analysis"),
-                        "confidence": output.get("confidence"),
-                        "sources": briefing.get("per_agent_sources", []),
-                    },
-                )
-                continue
-
-            if node == "guardian":
-                verdict = output.get("guardian_verdict") or {}
-                yield format_sse(
-                    "guardian",
-                    {
-                        "status": "complete",
-                        "passed": verdict.get("passed"),
-                        "overall_confidence": verdict.get("overall_confidence"),
-                        "summary": verdict.get("summary"),
-                        "flags": verdict.get("flags", []),
-                        "claim_checks": verdict.get("claim_checks", []),
-                    },
-                )
-                continue
+                elif node == "guardian":
+                    verdict = output.get("guardian_verdict") or {}
+                    yield format_sse(
+                        "guardian",
+                        {
+                            "status": "complete",
+                            "passed": verdict.get("passed"),
+                            "overall_confidence": verdict.get("overall_confidence"),
+                            "summary": verdict.get("summary"),
+                            "flags": verdict.get("flags", []),
+                            "claim_checks": verdict.get("claim_checks", []),
+                        },
+                    )
 
         briefing = accumulated.get("briefing") or {}
         guardian_verdict = briefing.get("guardian_verdict") or accumulated.get(
@@ -183,8 +180,6 @@ async def post_query(
     request: Request,
 ) -> Any:
     """Stream synthesis results as Server-Sent Events."""
-    from fastapi.responses import StreamingResponse
-
     agent_cards = request.app.state.agent_cards
     if not agent_cards:
         raise HTTPException(status_code=503, detail="Specialists not ready.")

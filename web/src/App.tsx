@@ -1,9 +1,10 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { Theme } from "@carbon/react";
 
 import { AppShell } from "@/components/AppShell";
 import { BootSplash } from "@/components/BootSplash";
+import { QueryProvider } from "@/contexts/QueryContext";
 import { AgentStatusPage } from "@/pages/AgentStatusPage";
 import { AlertsPage } from "@/pages/AlertsPage";
 import { BriefingsPage } from "@/pages/BriefingsPage";
@@ -20,6 +21,13 @@ function readStoredTheme(): AtlasTheme {
 export default function App() {
   const [booted, setBooted] = useState(false);
   const [theme, setTheme] = useState<AtlasTheme>(readStoredTheme);
+
+  useEffect(() => {
+    const active = booted ? theme : "g100";
+    document.documentElement.dataset.atlasTheme = active;
+    document.body.classList.remove("cds--g100", "cds--g10");
+    document.body.classList.add(active);
+  }, [booted, theme]);
 
   const toggleTheme = useCallback(() => {
     setTheme((current) => {
@@ -42,17 +50,19 @@ export default function App() {
       <a href="#main-content" className="atlas-skip-link">
         Skip to main content
       </a>
-      <BrowserRouter>
-        <Routes>
-          <Route element={<AppShell theme={theme} onToggleTheme={toggleTheme} />}>
-            <Route index element={<QueryPage />} />
-            <Route path="briefings" element={<BriefingsPage />} />
-            <Route path="alerts" element={<AlertsPage />} />
-            <Route path="agent-status" element={<AgentStatusPage />} />
-            <Route path="traces" element={<TraceViewerPage />} />
-          </Route>
-        </Routes>
-      </BrowserRouter>
+      <QueryProvider>
+        <BrowserRouter>
+          <Routes>
+            <Route element={<AppShell theme={theme} onToggleTheme={toggleTheme} />}>
+              <Route index element={<QueryPage />} />
+              <Route path="briefings" element={<BriefingsPage />} />
+              <Route path="alerts" element={<AlertsPage />} />
+              <Route path="agent-status" element={<AgentStatusPage />} />
+              <Route path="traces" element={<TraceViewerPage />} />
+            </Route>
+          </Routes>
+        </BrowserRouter>
+      </QueryProvider>
     </Theme>
   );
 }

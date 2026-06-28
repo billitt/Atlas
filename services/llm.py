@@ -36,41 +36,9 @@ def chat(prompt: str) -> str:
         span.set_attribute("prompt_length", len(prompt))
         span.set_attribute("model_name", OLLAMA_CHAT_MODEL)
         llm = get_chat_ollama()
-        # region debug log
-        import time as _dbgtime
-
-        _dbg_start = _dbgtime.perf_counter()
-        # endregion
         response = llm.invoke([HumanMessage(content=prompt)])
         text = str(response.content)
         span.set_attribute("response_length", len(text))
-        # region debug log
-        try:
-            import json as _dbgjson
-
-            with open("debug-e37193.log", "a", encoding="utf-8") as _f:
-                _f.write(
-                    _dbgjson.dumps(
-                        {
-                            "sessionId": "e37193",
-                            "runId": "pre-fix",
-                            "hypothesisId": "H1,H2,H4",
-                            "location": "services/llm.py:chat",
-                            "message": "llm.chat call complete",
-                            "data": {
-                                "model": OLLAMA_CHAT_MODEL,
-                                "prompt_length": len(prompt),
-                                "response_length": len(text),
-                                "duration_s": round(_dbgtime.perf_counter() - _dbg_start, 3),
-                            },
-                            "timestamp": int(_dbgtime.time() * 1000),
-                        }
-                    )
-                    + "\n"
-                )
-        except Exception:
-            pass
-        # endregion
         return text
 
 

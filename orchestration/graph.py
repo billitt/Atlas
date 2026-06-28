@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
+import functools
 from typing import Any
 
+from langgraph.config import get_stream_writer
 from langgraph.graph import END, START, StateGraph
 
 from agents.guardian.agent import GuardianAgent
@@ -30,13 +33,21 @@ def build_synthesis_graph(
             span.set_attribute("node_name", "plan")
             span.set_attribute("query", query)
             print("[graph.plan] Building execution plan")
-            plan = agent.plan(query)
+            # agent.plan calls chat() synchronously; run in thread to avoid
+            # blocking the asyncio event loop and stalling SSE flushes.
+            plan = await asyncio.to_thread(agent.plan, query)
             steps = plan.get("steps", []) if isinstance(plan, dict) else []
             span.set_attribute("plan_step_count", len(steps))
             return {"plan": plan}
 
     async def delegate_to_agents_node(state: SynthesisState) -> JsonDict:
         """plan -> delegate_to_agents: execute plan steps through A2A."""
+        write = get_stream_writer()
+
+        def on_step_done(result: JsonDict) -> None:
+            """Emit a per-agent custom event as each specialist finishes."""
+            write({"_atlas_type": "specialist_result", "result": result})
+
         with _tracer.start_as_current_span("graph.delegate_to_agents") as span:
             span.set_attribute("node_name", "delegate_to_agents")
             span.set_attribute("query", state["query"])
@@ -44,7 +55,7 @@ def build_synthesis_graph(
             steps = plan.get("steps", []) if isinstance(plan, dict) else []
             span.set_attribute("plan_step_count", len(steps))
             print("[graph.delegate_to_agents] Delegating plan steps over A2A")
-            agent_results = await agent.delegate(state["plan"])
+            agent_results = await agent.delegate(state["plan"], on_step_done=on_step_done)
             span.set_attribute("agent_count", len(agent_results))
             sources = []
             for result in agent_results:
@@ -64,11 +75,16 @@ def build_synthesis_graph(
             guardian_feedback = (
                 state.get("guardian_verdict") if state.get("guardian_retries", 0) else None
             )
-            briefing = agent.synthesize(
-                state["query"],
-                state["plan"],
-                state["agent_results"],
-                guardian_feedback=guardian_feedback,
+            # agent.synthesize calls chat() synchronously; run in thread to avoid
+            # blocking the asyncio event loop during the longest single LLM call.
+            briefing = await asyncio.to_thread(
+                functools.partial(
+                    agent.synthesize,
+                    state["query"],
+                    state["plan"],
+                    state["agent_results"],
+                    guardian_feedback=guardian_feedback,
+                )
             )
             span.set_attribute("confidence", briefing.get("overall_confidence", "LOW"))
             return {

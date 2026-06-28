@@ -42,7 +42,7 @@ export function getAuthToken(): string | null {
   return cachedToken;
 }
 
-function authHeaders(): HeadersInit {
+export function authHeaders(): HeadersInit {
   const token = getAuthToken();
   if (!token) return {};
   return { Authorization: `Bearer ${token}` };

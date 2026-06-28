@@ -46,7 +46,7 @@ export function BriefingsPage() {
           Scheduled intelligence reports on the topics you care about.
         </p>
         {error ? (
-          <InlineNotification kind="error" title={error} lowContrast hideCloseButton />
+          <InlineNotification kind="error" title={error} hideCloseButton />
         ) : null}
         {loading ? (
           <SkeletonText heading={false} lineCount={6} />

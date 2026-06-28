@@ -51,7 +51,7 @@ export function AgentStatusPage() {
           The health of the system&apos;s specialists and data sources.
         </p>
         {error ? (
-          <InlineNotification kind="error" title={error} lowContrast hideCloseButton />
+          <InlineNotification kind="error" title={error} hideCloseButton />
         ) : null}
         {loading ? (
           <SkeletonText heading={false} lineCount={8} />

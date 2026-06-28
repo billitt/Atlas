@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from collections.abc import Callable
 from datetime import datetime
 from typing import Any
 
@@ -39,7 +40,11 @@ class SynthesisAgent:
     def plan(self, query: str) -> JsonDict:
         return create_execution_plan(query, self.agent_cards)
 
-    async def delegate(self, plan: JsonDict) -> list[JsonDict]:
+    async def delegate(
+        self,
+        plan: JsonDict,
+        on_step_done: Callable[[JsonDict], None] | None = None,
+    ) -> list[JsonDict]:
         """Run plan steps through A2A `tasks/send`, fanning out independent steps.
 
         Steps whose `depends_on` are already satisfied run concurrently in
@@ -48,6 +53,9 @@ class SynthesisAgent:
         so Atlas never fires more simultaneous Granite calls than the hardware
         was sized for. The returned list preserves the original plan order for
         deterministic synthesis input.
+
+        ``on_step_done`` is called synchronously after each step completes,
+        allowing callers to stream per-agent progress events.
         """
         steps = list(plan.get("steps", []))
 
@@ -72,13 +80,16 @@ class SynthesisAgent:
             async with semaphore:
                 print(f"[synthesis.delegate] {agent} -> {task}")
                 response = await self.a2a.send_task(str(card["url"]), task)
-            return {
+            result = {
                 "agent": agent,
                 "task": task,
                 "card": card,
                 "response": response,
                 "artifact": _first_artifact(response),
             }
+            if on_step_done is not None:
+                on_step_done(result)
+            return result
 
         completed: set[str] = set()
         results_by_agent: dict[str, JsonDict] = {}

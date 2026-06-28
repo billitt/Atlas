@@ -1,5 +1,5 @@
 import type { Confidence } from "@/api-client/client";
-import { getAuthToken } from "@/api-client/client";
+import { authHeaders } from "@/api-client/client";
 
 export interface SpecialistPayload {
   agent: string;
@@ -99,19 +99,28 @@ function parseSseChunk(buffer: string): { events: QueryStreamEvent[]; rest: stri
   return { events, rest };
 }
 
+function isAbortError(e: unknown): boolean {
+  return e instanceof DOMException && e.name === "AbortError";
+}
+
 export async function streamQuery(
   query: string,
   onEvent: (event: QueryStreamEvent) => void,
+  signal?: AbortSignal,
 ): Promise<void> {
-  const token = getAuthToken();
-  const headers: HeadersInit = { "Content-Type": "application/json" };
-  if (token) headers.Authorization = `Bearer ${token}`;
-
-  const response = await fetch("/api/query", {
-    method: "POST",
-    headers,
-    body: JSON.stringify({ query }),
-  });
+  let response: Response;
+  try {
+    response = await fetch("/api/query", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authHeaders() },
+      body: JSON.stringify({ query }),
+      signal,
+    });
+  } catch (e) {
+    if (isAbortError(e)) return;
+    onEvent({ type: "error", message: "Query failed." });
+    return;
+  }
 
   if (!response.ok) {
     onEvent({ type: "error", message: "Query failed." });
@@ -127,15 +136,25 @@ export async function streamQuery(
   const decoder = new TextDecoder();
   let buffer = "";
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const parsed = parseSseChunk(buffer);
-    buffer = parsed.rest;
-    for (const event of parsed.events) {
-      onEvent(event);
+  try {
+    while (true) {
+      if (signal?.aborted) {
+        reader.cancel();
+        return;
+      }
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const parsed = parseSseChunk(buffer);
+      buffer = parsed.rest;
+      for (const event of parsed.events) {
+        onEvent(event);
+      }
     }
+  } catch (e) {
+    if (isAbortError(e)) return;
+    onEvent({ type: "error", message: "Query failed." });
+    return;
   }
 
   if (buffer.trim()) {

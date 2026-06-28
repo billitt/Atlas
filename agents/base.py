@@ -105,36 +105,6 @@ class BaseAgent(ABC):
                     run_span.set_attribute(
                         "duration_ms", round((perf_counter() - run_start) * 1000, 3)
                     )
-                    # region debug log
-                    try:
-                        import json as _dbgjson
-                        import time as _dbgtime
-
-                        with open("debug-e37193.log", "a", encoding="utf-8") as _f:
-                            _f.write(
-                                _dbgjson.dumps(
-                                    {
-                                        "sessionId": "e37193",
-                                        "runId": "pre-fix",
-                                        "hypothesisId": "H1",
-                                        "location": "agents/base.py:run",
-                                        "message": "agent.run completed",
-                                        "data": {
-                                            "agent": self.agent_name,
-                                            "attempts": attempt + 1,
-                                            "outcome": "passed",
-                                            "total_duration_s": round(
-                                                perf_counter() - run_start, 3
-                                            ),
-                                        },
-                                        "timestamp": int(_dbgtime.time() * 1000),
-                                    }
-                                )
-                                + "\n"
-                            )
-                    except Exception:
-                        pass
-                    # endregion
                     return draft
 
                 reflection_feedback = feedback
@@ -147,34 +117,6 @@ class BaseAgent(ABC):
                     last_draft["confidence"] = "LOW"
                 run_span.set_attribute("confidence", last_draft["confidence"])
                 run_span.set_attribute("duration_ms", round((perf_counter() - run_start) * 1000, 3))
-                # region debug log
-                try:
-                    import json as _dbgjson
-                    import time as _dbgtime
-
-                    with open("debug-e37193.log", "a", encoding="utf-8") as _f:
-                        _f.write(
-                            _dbgjson.dumps(
-                                {
-                                    "sessionId": "e37193",
-                                    "runId": "pre-fix",
-                                    "hypothesisId": "H1",
-                                    "location": "agents/base.py:run",
-                                    "message": "agent.run max retries",
-                                    "data": {
-                                        "agent": self.agent_name,
-                                        "attempts": attempt + 1,
-                                        "outcome": "max_retries",
-                                        "total_duration_s": round(perf_counter() - run_start, 3),
-                                    },
-                                    "timestamp": int(_dbgtime.time() * 1000),
-                                }
-                            )
-                            + "\n"
-                        )
-                except Exception:
-                    pass
-                # endregion
                 return last_draft
 
         raise RuntimeError("agent produced no draft")

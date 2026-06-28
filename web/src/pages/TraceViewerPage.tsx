@@ -102,7 +102,7 @@ export function TraceViewerPage() {
           </Select>
         )}
         {error ? (
-          <InlineNotification kind="error" title={error} lowContrast hideCloseButton />
+          <InlineNotification kind="error" title={error} hideCloseButton />
         ) : null}
         {loadingDetail ? (
           <SkeletonText heading={false} lineCount={10} className="atlas-trace-skeleton" />

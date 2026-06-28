@@ -9,7 +9,6 @@ import {
   StructuredListCell,
   StructuredListRow,
   StructuredListWrapper,
-  Tag,
   Tile,
 } from "@carbon/react";
 import { useCallback, useEffect, useState } from "react";
@@ -20,11 +19,7 @@ import {
   type AlertRule,
   type AlertRow,
 } from "@/api-client/client";
-
-function severityTag(severity: string) {
-  const type = severity === "HIGH" ? "red" : severity === "MEDIUM" ? "gray" : "green";
-  return <Tag type={type} size="sm">{severity}</Tag>;
-}
+import { SeverityTag } from "@/components/SeverityTag";
 
 export function AlertsPage() {
   const [rules, setRules] = useState<AlertRule[]>([]);
@@ -81,15 +76,10 @@ export function AlertsPage() {
           </Button>
         </div>
         {checkMessage ? (
-          <InlineNotification
-            kind="info"
-            title={checkMessage}
-            lowContrast
-            hideCloseButton
-          />
+          <InlineNotification kind="info" title={checkMessage} hideCloseButton />
         ) : null}
         {error ? (
-          <InlineNotification kind="error" title={error} lowContrast hideCloseButton />
+          <InlineNotification kind="error" title={error} hideCloseButton />
         ) : null}
         {loading ? (
           <SkeletonText heading={false} lineCount={6} />
@@ -103,7 +93,7 @@ export function AlertsPage() {
                     <StructuredListRow key={rule.id}>
                       <StructuredListCell>
                         <div className="atlas-alert-rule">
-                          {severityTag(rule.severity)}
+                          <SeverityTag severity={rule.severity} />
                           <strong>{rule.name}</strong>
                         </div>
                         <div className="atlas-list-sub">{rule.description}</div>
@@ -124,7 +114,7 @@ export function AlertsPage() {
                       <StructuredListRow key={row.id}>
                         <StructuredListCell>
                           <div className="atlas-alert-rule">
-                            {severityTag(row.severity)}
+                            <SeverityTag severity={row.severity} />
                             <span>{row.timestamp}</span>
                           </div>
                           <div>{row.rule_name}</div>

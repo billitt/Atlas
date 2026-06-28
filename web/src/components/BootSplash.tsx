@@ -1,24 +1,7 @@
 import { Loading } from "@carbon/react";
 import { useEffect, useState } from "react";
 
-import { fetchSession, fetchStatus } from "@/api-client/client";
-
-function friendlyBootMessage(issues: string[]): string {
-  if (issues.length === 0) {
-    return "Preparing Atlas…";
-  }
-  const joined = issues.join(" ").toLowerCase();
-  if (joined.includes("ollama") || joined.includes("model")) {
-    return "Loading the local AI model…";
-  }
-  if (joined.includes("mcp-market") || joined.includes("market")) {
-    return "Starting the market data service…";
-  }
-  if (joined.includes("mcp-edgar") || joined.includes("edgar")) {
-    return "Starting the filings data service…";
-  }
-  return issues[0];
-}
+import { fetchSession } from "@/api-client/client";
 
 interface BootSplashProps {
   onReady: () => void;
@@ -30,34 +13,24 @@ export function BootSplash({ onReady }: BootSplashProps) {
 
   useEffect(() => {
     let cancelled = false;
-    let attempts = 0;
 
     async function boot(): Promise<void> {
-      try {
-        await fetchSession();
-      } catch {
-        if (!cancelled) {
-          setError("Cannot reach the Atlas API on this machine.");
-        }
-        return;
-      }
-
-      while (!cancelled && attempts < 120) {
-        attempts += 1;
+      // Gate only on the API being reachable (fast — just reads an env var).
+      // Ollama / MCP readiness is checked per-feature on the Query page.
+      const MAX_ATTEMPTS = 20; // 10 s at 500 ms
+      for (let i = 0; i < MAX_ATTEMPTS; i++) {
+        if (cancelled) return;
         try {
-          const status = await fetchStatus();
-          if (status.ready) {
-            onReady();
-            return;
-          }
-          setMessage(friendlyBootMessage(status.issues));
+          await fetchSession();
+          if (!cancelled) onReady();
+          return;
         } catch {
-          setMessage("Waiting for Atlas services…");
+          if (i === 0) setMessage("Starting Atlas…");
         }
-        await new Promise((resolve) => setTimeout(resolve, 1500));
+        await new Promise((r) => setTimeout(r, 500));
       }
       if (!cancelled) {
-        setError("Atlas prerequisites did not become ready. Check Ollama and MCP servers.");
+        setError("Cannot reach the Atlas API. Is atlas-api running?");
       }
     }
 
