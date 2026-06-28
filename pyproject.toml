@@ -15,6 +15,8 @@ dependencies = [
     "mcp[cli]>=1.27",
     # LLM & embeddings (runtime via Ollama)
     "httpx>=0.28",
+    # Host capability detection (auto-sizes agent concurrency)
+    "psutil>=5.9",
     # Memory & data
     "chromadb>=0.6",
     "sqlmodel>=0.0.22",

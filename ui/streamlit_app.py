@@ -8,6 +8,12 @@ from pathlib import Path
 
 import streamlit as st
 
+from services.runtime_config import (
+    format_recommendation_message,
+    get_runtime_config,
+    mark_acknowledged,
+    needs_recommendation_prompt,
+)
 from ui.runtime import ensure_agent_runtime, get_status
 from ui.styles import global_css
 from ui.views import agent_status, alerts, briefings, query, trace_viewer
@@ -51,6 +57,17 @@ def render_sidebar_status() -> None:
         st.sidebar.caption("A2A agents: idle")
 
 
+def render_recommendation_gate() -> bool:
+    """Show the one-time hardware/Ollama recommendation. Returns True to proceed."""
+    if not needs_recommendation_prompt():
+        return True
+    st.info(format_recommendation_message(get_runtime_config()))
+    if st.button("Proceed", type="primary"):
+        mark_acknowledged()
+        st.rerun()
+    return False
+
+
 def run_dashboard() -> None:
     """Render the Streamlit dashboard (called on each Streamlit rerun)."""
     st.set_page_config(
@@ -61,6 +78,9 @@ def run_dashboard() -> None:
     )
 
     st.markdown(global_css(), unsafe_allow_html=True)
+
+    if not render_recommendation_gate():
+        return
 
     if not st.session_state.get("agents_started"):
         st.session_state.agents_started = True

@@ -48,6 +48,12 @@ from services.alert_watch import AlertWatcher
 from services.briefing import BriefingEngine
 from services.briefing_templates import format_summary_line
 from services.llm import OLLAMA_BASE_URL, OLLAMA_CHAT_MODEL, list_models
+from services.runtime_config import (
+    format_recommendation_message,
+    get_runtime_config,
+    mark_acknowledged,
+    needs_recommendation_prompt,
+)
 
 JsonDict = dict[str, Any]
 
@@ -74,6 +80,16 @@ def _maybe_init_tracing() -> None:
 
     if os.getenv("OTEL_EXPORT_TO"):
         init_tracing()
+
+
+def _maybe_prompt_parallelism() -> None:
+    """Show the one-time hardware/Ollama recommendation and confirm readiness."""
+    if not needs_recommendation_prompt():
+        return
+    typer.echo(format_recommendation_message(get_runtime_config()))
+    if not typer.confirm("Ready to proceed?", default=True):
+        raise typer.Exit(0)
+    mark_acknowledged()
 
 
 @contextmanager
@@ -235,6 +251,7 @@ def query_command(
     text: str = typer.Argument(..., help="Natural-language intelligence query."),
 ) -> None:
     """Run the full synthesis pipeline and print a formatted briefing."""
+    _maybe_prompt_parallelism()
     _maybe_init_tracing()
     typer.echo(f"Running synthesis query: {text}")
     typer.echo("Starting specialist A2A servers...")
@@ -295,6 +312,7 @@ def briefing_command(
     topics: str | None = typer.Option(None, "--topics", help="Comma-separated watchlist override."),
 ) -> None:
     """Generate a scheduled-style briefing over the default or custom watchlist."""
+    _maybe_prompt_parallelism()
     _maybe_init_tracing()
     selected_topics = (
         [part.strip() for part in topics.split(",") if part.strip()] if topics else None

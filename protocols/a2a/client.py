@@ -1,10 +1,10 @@
 """Async A2A client for agent discovery and task delegation."""
 
 from __future__ import annotations
-
+import time as _dbgtime
 import uuid
 from typing import Any
-
+import json as _dbgjson
 import httpx
 
 from observability.tracing import get_tracer
@@ -56,17 +56,74 @@ class A2AClient:
                 span.set_attribute("target_agent", str(card.get("name", url)))
             except httpx.HTTPError:
                 span.set_attribute("target_agent", url)
-            result = await self._json_rpc(
-                url,
-                "tasks/send",
-                {
-                    "id": str(uuid.uuid4()),
-                    "message": {
-                        "role": "user",
-                        "parts": [{"kind": "text", "text": message}],
+            # region debug log
+            
+
+            _dbg_start = _dbgtime.perf_counter()
+            # endregion
+            try:
+                result = await self._json_rpc(
+                    url,
+                    "tasks/send",
+                    {
+                        "id": str(uuid.uuid4()),
+                        "message": {
+                            "role": "user",
+                            "parts": [{"kind": "text", "text": message}],
+                        },
                     },
-                },
-            )
+                )
+            except Exception as _dbg_exc:
+                # region debug log
+                try:
+                    with open("debug-e37193.log", "a", encoding="utf-8") as _f:
+                        _f.write(
+                            _dbgjson.dumps(
+                                {
+                                    "sessionId": "e37193",
+                                    "runId": "pre-fix",
+                                    "hypothesisId": "H5",
+                                    "location": "protocols/a2a/client.py:send_task",
+                                    "message": "send_task FAILED",
+                                    "data": {
+                                        "target_url": url,
+                                        "timeout_s": self.timeout,
+                                        "elapsed_s": round(_dbgtime.perf_counter() - _dbg_start, 3),
+                                        "error": type(_dbg_exc).__name__,
+                                    },
+                                    "timestamp": int(_dbgtime.time() * 1000),
+                                }
+                            )
+                            + "\n"
+                        )
+                except Exception:
+                    pass
+                # endregion
+                raise
+            # region debug log
+            try:
+                with open("debug-e37193.log", "a", encoding="utf-8") as _f:
+                    _f.write(
+                        _dbgjson.dumps(
+                            {
+                                "sessionId": "e37193",
+                                "runId": "pre-fix",
+                                "hypothesisId": "H5",
+                                "location": "protocols/a2a/client.py:send_task",
+                                "message": "send_task OK",
+                                "data": {
+                                    "target_url": url,
+                                    "timeout_s": self.timeout,
+                                    "elapsed_s": round(_dbgtime.perf_counter() - _dbg_start, 3),
+                                },
+                                "timestamp": int(_dbgtime.time() * 1000),
+                            }
+                        )
+                        + "\n"
+                    )
+            except Exception:
+                pass
+            # endregion
             if not isinstance(result, dict):
                 raise RuntimeError(f"unexpected tasks/send result: {result!r}")
             return result

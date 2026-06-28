@@ -19,6 +19,7 @@ build/
 data/chroma/
 data/sqlite/
 data/traces/
+data/runtime_config.json
 runs/
 *.db
 

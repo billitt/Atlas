@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from datetime import datetime
 from typing import Any
@@ -10,6 +11,7 @@ from agents.synthesis.planner import agent_key, create_execution_plan
 from memory.episodic import EpisodicMemory
 from protocols.a2a.client import A2AClient
 from services.llm import chat
+from services.runtime_config import recommended_concurrency
 
 JsonDict = dict[str, Any]
 
@@ -38,41 +40,70 @@ class SynthesisAgent:
         return create_execution_plan(query, self.agent_cards)
 
     async def delegate(self, plan: JsonDict) -> list[JsonDict]:
-        """Run plan steps sequentially through A2A `tasks/send`.
+        """Run plan steps through A2A `tasks/send`, fanning out independent steps.
 
-        Sequential execution is deliberate for now: every specialist may call the
-        same local Granite model through Ollama, so parallel calls would contend
-        for a single GPU/model runtime.
+        Steps whose `depends_on` are already satisfied run concurrently in
+        dependency "waves" via `asyncio.gather`. Concurrency is bounded by an
+        `asyncio.Semaphore` sized to the host machine (`recommended_concurrency`)
+        so Atlas never fires more simultaneous Granite calls than the hardware
+        was sized for. The returned list preserves the original plan order for
+        deterministic synthesis input.
         """
-        results: list[JsonDict] = []
-        completed: set[str] = set()
+        steps = list(plan.get("steps", []))
 
-        for index, step in enumerate(plan.get("steps", []), start=1):
+        # Validate agents and dependency references up front.
+        known_agents = {str(step.get("agent")) for step in steps}
+        for step in steps:
             agent = str(step.get("agent"))
-            depends_on = set(step.get("depends_on", []))
-            missing = depends_on - completed
-            if missing:
-                raise RuntimeError(f"step {agent} depends on incomplete steps: {sorted(missing)}")
-
-            card = self.card_by_key.get(agent)
-            if card is None:
+            if self.card_by_key.get(agent) is None:
                 raise RuntimeError(f"plan referenced unknown agent: {agent}")
+            unknown_deps = set(step.get("depends_on", [])) - known_agents
+            if unknown_deps:
+                raise RuntimeError(
+                    f"step {agent} depends on unknown steps: {sorted(unknown_deps)}"
+                )
 
+        semaphore = asyncio.Semaphore(max(1, recommended_concurrency()))
+
+        async def _run_step(step: JsonDict) -> JsonDict:
+            agent = str(step.get("agent"))
+            card = self.card_by_key[agent]
             task = str(step.get("task", ""))
-            print(f"[synthesis.delegate] Step {index}: {agent} -> {task}")
-            response = await self.a2a.send_task(str(card["url"]), task)
-            results.append(
-                {
-                    "agent": agent,
-                    "task": task,
-                    "card": card,
-                    "response": response,
-                    "artifact": _first_artifact(response),
-                }
-            )
-            completed.add(agent)
+            async with semaphore:
+                print(f"[synthesis.delegate] {agent} -> {task}")
+                response = await self.a2a.send_task(str(card["url"]), task)
+            return {
+                "agent": agent,
+                "task": task,
+                "card": card,
+                "response": response,
+                "artifact": _first_artifact(response),
+            }
 
-        return results
+        completed: set[str] = set()
+        results_by_agent: dict[str, JsonDict] = {}
+        remaining = steps[:]
+
+        while remaining:
+            wave = [
+                step
+                for step in remaining
+                if set(step.get("depends_on", [])) <= completed
+            ]
+            if not wave:
+                stuck = [str(step.get("agent")) for step in remaining]
+                raise RuntimeError(f"unsatisfiable step dependencies among: {stuck}")
+
+            wave_results = await asyncio.gather(*(_run_step(step) for step in wave))
+            for step, result in zip(wave, wave_results):
+                agent = str(step.get("agent"))
+                results_by_agent[agent] = result
+                completed.add(agent)
+            remaining = [
+                step for step in remaining if str(step.get("agent")) not in completed
+            ]
+
+        return [results_by_agent[str(step.get("agent"))] for step in steps]
 
     def synthesize(
         self,
