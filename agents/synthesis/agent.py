@@ -8,6 +8,7 @@ from collections.abc import Callable
 from datetime import datetime
 from typing import Any
 
+from agents.formatting import MARKDOWN_FORMAT_INSTRUCTIONS
 from agents.synthesis.planner import agent_key, create_execution_plan
 from memory.episodic import EpisodicMemory
 from protocols.a2a.client import A2AClient
@@ -161,7 +162,10 @@ Instructions:
 - Keep the briefing grounded in the specialist artifacts.
 - If past briefings exist, briefly mention whether the current assessment changed.
 
-Return 4-6 concise paragraphs plus a short "Key sources" line.
+Structure the briefing with markdown sections covering the main risk dimensions.
+Include a short **Key sources** line at the end.
+
+{MARKDOWN_FORMAT_INSTRUCTIONS}
 """
         combined_analysis = chat(prompt).strip()
         briefing = {

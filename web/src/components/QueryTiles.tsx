@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 
 import type { SourceItem, SpecialistPayload } from "@/api-client/query";
+import { AnalysisContent } from "@/components/AnalysisContent";
 import { AtlasLoading } from "@/components/AtlasLoading";
 import { ConfidenceTag } from "@/components/ConfidenceTag";
 import { Badge } from "@/components/ui/badge";
@@ -54,7 +55,7 @@ export function SpecialistTile({ label, data, loading }: SpecialistTileProps) {
           <AtlasLoading compact />
         ) : (
           <>
-            <p className="atlas-tile-body">{data?.analysis ?? "No analysis returned."}</p>
+            <AnalysisContent text={data?.analysis ?? "No analysis returned."} />
             {data ? <SourceList sources={data.sources} /> : null}
           </>
         )}
@@ -98,7 +99,7 @@ export function SummaryTile({
           <AtlasLoading compact />
         ) : (
           <>
-            <p className="atlas-tile-body">{analysis ?? "Summary will appear here."}</p>
+            <AnalysisContent text={analysis ?? "Summary will appear here."} />
             {traceId ? (
               <Link
                 to={`/traces?trace_id=${encodeURIComponent(traceId)}`}

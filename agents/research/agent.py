@@ -7,6 +7,7 @@ import re
 from typing import Any
 
 from agents.base import AgentResult, BaseAgent, Confidence
+from agents.formatting import MARKDOWN_FORMAT_INSTRUCTIONS
 from agents.research import tools as research_tools
 from memory.semantic import SemanticMemory
 from protocols.mcp.client import McpClient
@@ -148,6 +149,8 @@ Instructions:
 - If only filing metadata is available, say so and avoid quoting unavailable text.
 - Identify useful filings, risk-factor language, or disclosure gaps.
 - Keep the answer concise and include source references.
+
+{MARKDOWN_FORMAT_INSTRUCTIONS}
 """
         analysis = chat(prompt).strip()
         return {"analysis": analysis, "sources": fetched, "confidence": "MEDIUM"}

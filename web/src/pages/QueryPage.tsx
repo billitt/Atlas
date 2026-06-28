@@ -20,14 +20,28 @@ export function QueryPage() {
   const [inputValue, setInputValue] = useState("");
   const [prereqIssues, setPrereqIssues] = useState<string[]>([]);
 
-  const { running, specialists, summary, confidence, passed, traceId, error, hasResults, startQuery } =
-    useQuery();
+  const {
+    running,
+    question,
+    specialists,
+    summary,
+    confidence,
+    passed,
+    traceId,
+    error,
+    hasResults,
+    startQuery,
+  } = useQuery();
 
   useEffect(() => {
     fetchStatus()
       .then((s) => setPrereqIssues(s.ready ? [] : (s.issues ?? [])))
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (question) setInputValue(question);
+  }, [question]);
 
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
@@ -40,7 +54,7 @@ export function QueryPage() {
     <div className="mx-auto max-w-7xl px-4 py-6">
       <h1 className="text-2xl font-semibold tracking-tight">Query</h1>
       <p className="atlas-page-caption">
-        Ask a question about global risk and get a sourced, fact-checked answer.
+      Global business intelligence built to be audited: ask, watch the reasoning, verify the sources.
       </p>
 
       {prereqIssues.length > 0 ? (
@@ -70,7 +84,7 @@ export function QueryPage() {
               }
             }}
             rows={3}
-            disabled={running}
+            readOnly={running}
           />
         </div>
         <Button type="submit" disabled={running || !inputValue.trim()}>
@@ -83,6 +97,13 @@ export function QueryPage() {
           <AlertTitle>Could not complete query</AlertTitle>
           <AlertDescription>{error}</AlertDescription>
         </Alert>
+      ) : null}
+
+      {question && (running || hasResults) ? (
+        <div className="mb-4 rounded-md border border-border bg-muted/40 px-4 py-3 text-sm">
+          <span className="font-medium text-muted-foreground">Asked: </span>
+          <span>{question}</span>
+        </div>
       ) : null}
 
       {hasResults || running ? (

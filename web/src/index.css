@@ -167,6 +167,36 @@
   line-height: 1.5;
 }
 
+.atlas-prose h2 {
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin: 1rem 0 0.5rem;
+}
+
+.atlas-prose h2:first-child {
+  margin-top: 0;
+}
+
+.atlas-prose ul {
+  list-style: disc;
+  padding-left: 1.25rem;
+  margin: 0.5rem 0;
+}
+
+.atlas-prose li {
+  margin: 0.25rem 0;
+}
+
+.atlas-prose p {
+  margin: 0.5rem 0;
+  line-height: 1.6;
+}
+
+.atlas-prose strong {
+  font-weight: 600;
+  color: hsl(var(--foreground));
+}
+
 .atlas-sources {
   margin-top: 1rem;
   font-size: 0.8125rem;

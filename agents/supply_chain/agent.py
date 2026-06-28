@@ -11,6 +11,7 @@ import re
 from typing import Any
 
 from agents.base import AgentResult, BaseAgent, Confidence
+from agents.formatting import MARKDOWN_FORMAT_INSTRUCTIONS
 from memory.semantic import SemanticMemory
 from services.llm import chat
 
@@ -75,7 +76,7 @@ Constraints:
 - Focus on dependencies, chokepoints, substitution options, lead-time risk, and
   likely second-order impacts.
 
-Return 3-5 concise paragraphs.
+{MARKDOWN_FORMAT_INSTRUCTIONS}
 """
         analysis = chat(prompt).strip()
         sources: list[dict[str, Any]] = list(semantic_sources)

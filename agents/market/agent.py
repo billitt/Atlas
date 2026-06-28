@@ -8,6 +8,7 @@ from time import perf_counter
 from typing import Any
 
 from agents.base import AgentResult, BaseAgent, Confidence
+from agents.formatting import MARKDOWN_FORMAT_INSTRUCTIONS
 from agents.market import tools as market_tools
 from memory.episodic import EpisodicMemory
 from memory.semantic import SemanticMemory
@@ -178,7 +179,7 @@ Relevant semantic memory context:
 {semantic_context}
 {correction_block}
 
-Write a concise analyst-style answer (2–4 short paragraphs) that:
+Write a concise analyst-style answer that:
 - States current price, change vs previous close, and volume when available
 - Notes currency and any data gaps or errors explicitly
 - Does not claim or speculate about news, earnings, macro events, sentiment, or causes of price movement unless present in the data
@@ -188,6 +189,8 @@ Write a concise analyst-style answer (2–4 short paragraphs) that:
 - If the data only contains quote and volume fields, say it shows price/volume movement but not the reason
 
 End with a single line: SOURCES: comma-separated list of symbols you used.
+
+{MARKDOWN_FORMAT_INSTRUCTIONS}
 """
         analysis = chat(prompt).strip()
         print("[execute] Granite draft analysis complete")
