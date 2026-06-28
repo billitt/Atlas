@@ -1,4 +1,5 @@
-import { Link, SkeletonText, Tag, Tile } from "@carbon/react";
+import { SkeletonText, Tag, Tile } from "@carbon/react";
+import { Link } from "react-router-dom";
 
 import type { SpecialistPayload } from "@/api-client/query";
 import { ConfidenceTag } from "@/components/ConfidenceTag";
@@ -81,7 +82,7 @@ export function SummaryTile({
         <>
           <p className="atlas-tile-body">{analysis ?? "Summary will appear here."}</p>
           {traceId ? (
-            <Link href={`/traces?trace_id=${encodeURIComponent(traceId)}`} className="atlas-reasoning-link">
+            <Link to={`/traces?trace_id=${encodeURIComponent(traceId)}`} className="atlas-reasoning-link">
               View reasoning
             </Link>
           ) : null}

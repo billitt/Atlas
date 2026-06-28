@@ -107,3 +107,52 @@ body {
   font-size: 0.875rem;
 }
 
+.atlas-list-sub {
+  margin-top: 0.25rem;
+  color: var(--cds-text-secondary);
+  font-size: 0.8125rem;
+  line-height: 1.4;
+}
+
+.atlas-inline-actions {
+  margin-bottom: 1rem;
+}
+
+.atlas-section-tile {
+  margin-bottom: 1rem;
+}
+
+.atlas-status-grid {
+  display: grid;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+@media (min-width: 672px) {
+  .atlas-status-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1056px) {
+  .atlas-status-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.atlas-alert-rule {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.atlas-trace-output textarea {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.8125rem;
+}
+
+.atlas-trace-skeleton {
+  margin-top: 1rem;
+}
+

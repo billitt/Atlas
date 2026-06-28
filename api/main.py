@@ -13,8 +13,12 @@ from fastapi.responses import JSONResponse
 
 from api.config import API_PORT, BIND_HOST, DEV_FRONTEND_ORIGIN
 from api.runtime import boot_agent_runtime, shutdown_agent_servers
+from api.routes.agents import router as agents_router
+from api.routes.alerts import router as alerts_router
+from api.routes.briefings import router as briefings_router
 from api.routes.query import router as query_router
 from api.routes.status import router as status_router
+from api.routes.traces import router as traces_router
 from observability.tracing import init_tracing, shutdown_tracing
 
 
@@ -68,6 +72,10 @@ def create_app(*, production: bool = False) -> FastAPI:
 
     app.include_router(status_router, prefix="/api", tags=["status"])
     app.include_router(query_router, prefix="/api", tags=["query"])
+    app.include_router(agents_router, prefix="/api", tags=["agents"])
+    app.include_router(briefings_router, prefix="/api", tags=["briefings"])
+    app.include_router(alerts_router, prefix="/api", tags=["alerts"])
+    app.include_router(traces_router, prefix="/api", tags=["traces"])
 
     static_dir = Path(__file__).resolve().parent.parent / "web" / "dist"
     if production and static_dir.is_dir():
