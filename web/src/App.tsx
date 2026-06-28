@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
-import { Theme } from "@carbon/react";
 
 import { AppShell } from "@/components/AppShell";
 import { BootSplash } from "@/components/BootSplash";
@@ -25,8 +24,7 @@ export default function App() {
   useEffect(() => {
     const active = booted ? theme : "g100";
     document.documentElement.dataset.atlasTheme = active;
-    document.body.classList.remove("cds--g100", "cds--g10");
-    document.body.classList.add(active);
+    document.documentElement.classList.toggle("dark", active === "g100");
   }, [booted, theme]);
 
   const toggleTheme = useCallback(() => {
@@ -38,15 +36,11 @@ export default function App() {
   }, []);
 
   if (!booted) {
-    return (
-      <Theme theme="g100">
-        <BootSplash onReady={() => setBooted(true)} />
-      </Theme>
-    );
+    return <BootSplash onReady={() => setBooted(true)} />;
   }
 
   return (
-    <Theme theme={theme}>
+    <>
       <a href="#main-content" className="atlas-skip-link">
         Skip to main content
       </a>
@@ -63,6 +57,6 @@ export default function App() {
           </Routes>
         </BrowserRouter>
       </QueryProvider>
-    </Theme>
+    </>
   );
 }

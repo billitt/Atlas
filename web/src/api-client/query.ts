@@ -1,12 +1,18 @@
 import type { Confidence } from "@/api-client/client";
 import { authHeaders } from "@/api-client/client";
 
+export interface SourceItem {
+  label: string;
+  detail?: string;
+  url?: string;
+}
+
 export interface SpecialistPayload {
   agent: string;
   label: string;
   analysis?: string;
   confidence?: Confidence;
-  sources?: Array<Record<string, unknown>>;
+  sources?: SourceItem[];
   task?: string;
 }
 
@@ -14,7 +20,7 @@ export interface SynthesizePayload {
   status: string;
   combined_analysis?: string;
   confidence?: Confidence;
-  sources?: Array<Record<string, unknown>>;
+  sources?: SourceItem[];
 }
 
 export interface GuardianPayload {
@@ -29,7 +35,7 @@ export interface FinalPayload {
   briefing?: {
     combined_analysis?: string;
     overall_confidence?: Confidence;
-    per_agent_sources?: Array<Record<string, unknown>>;
+    per_agent_sources?: SourceItem[];
     guardian_verdict?: GuardianPayload;
   };
   trace_id?: string;

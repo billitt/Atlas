@@ -1,4 +1,4 @@
-import { Loading } from "@carbon/react";
+import { Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { fetchSession } from "@/api-client/client";
@@ -15,9 +15,7 @@ export function BootSplash({ onReady }: BootSplashProps) {
     let cancelled = false;
 
     async function boot(): Promise<void> {
-      // Gate only on the API being reachable (fast — just reads an env var).
-      // Ollama / MCP readiness is checked per-feature on the Query page.
-      const MAX_ATTEMPTS = 20; // 10 s at 500 ms
+      const MAX_ATTEMPTS = 20;
       for (let i = 0; i < MAX_ATTEMPTS; i++) {
         if (cancelled) return;
         try {
@@ -42,18 +40,18 @@ export function BootSplash({ onReady }: BootSplashProps) {
 
   if (error) {
     return (
-      <div className="atlas-boot-screen">
-        <div className="atlas-boot-title">Atlas</div>
-        <p className="atlas-boot-message">{error}</p>
+      <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-background px-8">
+        <div className="text-3xl font-semibold tracking-tight">Atlas</div>
+        <p className="text-sm text-muted-foreground">{error}</p>
       </div>
     );
   }
 
   return (
-    <div className="atlas-boot-screen">
-      <div className="atlas-boot-title">Atlas</div>
-      <Loading withOverlay={false} small={false} description={message} />
-      <p className="atlas-boot-message">{message}</p>
+    <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-background px-8">
+      <div className="text-3xl font-semibold tracking-tight">Atlas</div>
+      <Loader2 className="h-8 w-8 animate-spin text-primary" aria-label={message} />
+      <p className="text-sm text-muted-foreground">{message}</p>
     </div>
   );
 }

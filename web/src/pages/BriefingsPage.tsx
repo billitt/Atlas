@@ -1,20 +1,18 @@
-import {
-  Column,
-  Grid,
-  Heading,
-  InlineNotification,
-  SkeletonText,
-  StructuredListBody,
-  StructuredListCell,
-  StructuredListHead,
-  StructuredListRow,
-  StructuredListWrapper,
-} from "@carbon/react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { fetchBriefings, type BriefingRow } from "@/api-client/client";
+import { AtlasLoading } from "@/components/AtlasLoading";
 import { ConfidenceTag } from "@/components/ConfidenceTag";
+import { Alert, AlertTitle } from "@/components/ui/alert";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 export function BriefingsPage() {
   const [rows, setRows] = useState<BriefingRow[]>([]);
@@ -39,55 +37,60 @@ export function BriefingsPage() {
   }, []);
 
   return (
-    <Grid>
-      <Column lg={16} md={8} sm={4}>
-        <Heading>Briefings</Heading>
-        <p className="atlas-page-caption">
-          Scheduled intelligence reports on the topics you care about.
-        </p>
-        {error ? (
-          <InlineNotification kind="error" title={error} hideCloseButton />
-        ) : null}
-        {loading ? (
-          <SkeletonText heading={false} lineCount={6} />
-        ) : rows.length === 0 ? (
-          <p className="atlas-tile-body">No briefings recorded yet.</p>
-        ) : (
-          <StructuredListWrapper>
-            <StructuredListHead>
-              <StructuredListRow head>
-                <StructuredListCell head>When</StructuredListCell>
-                <StructuredListCell head>Topic</StructuredListCell>
-                <StructuredListCell head>Confidence</StructuredListCell>
-                <StructuredListCell head>Trace</StructuredListCell>
-              </StructuredListRow>
-            </StructuredListHead>
-            <StructuredListBody>
+    <div className="mx-auto max-w-7xl px-4 py-6">
+      <h1 className="text-2xl font-semibold tracking-tight">Briefings</h1>
+      <p className="atlas-page-caption">
+        Scheduled intelligence reports on the topics you care about.
+      </p>
+      {error ? (
+        <Alert variant="destructive" className="mb-4">
+          <AlertTitle>{error}</AlertTitle>
+        </Alert>
+      ) : null}
+      {loading ? (
+        <AtlasLoading />
+      ) : rows.length === 0 ? (
+        <p className="atlas-tile-body">No briefings recorded yet.</p>
+      ) : (
+        <div className="rounded-md border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>When</TableHead>
+                <TableHead>Topic</TableHead>
+                <TableHead>Confidence</TableHead>
+                <TableHead>Trace</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {rows.map((row) => (
-                <StructuredListRow key={row.id}>
-                  <StructuredListCell>{row.timestamp}</StructuredListCell>
-                  <StructuredListCell>
+                <TableRow key={row.id}>
+                  <TableCell>{row.timestamp}</TableCell>
+                  <TableCell>
                     <div>{row.query}</div>
                     <div className="atlas-list-sub">{row.summary}</div>
-                  </StructuredListCell>
-                  <StructuredListCell>
+                  </TableCell>
+                  <TableCell>
                     <ConfidenceTag level={row.confidence} />
-                  </StructuredListCell>
-                  <StructuredListCell>
+                  </TableCell>
+                  <TableCell>
                     {row.trace_id ? (
-                      <Link to={`/traces?trace_id=${encodeURIComponent(row.trace_id)}`}>
+                      <Link
+                        to={`/traces?trace_id=${encodeURIComponent(row.trace_id)}`}
+                        className="text-primary hover:underline"
+                      >
                         View reasoning
                       </Link>
                     ) : (
                       "—"
                     )}
-                  </StructuredListCell>
-                </StructuredListRow>
+                  </TableCell>
+                </TableRow>
               ))}
-            </StructuredListBody>
-          </StructuredListWrapper>
-        )}
-      </Column>
-    </Grid>
+            </TableBody>
+          </Table>
+        </div>
+      )}
+    </div>
   );
 }

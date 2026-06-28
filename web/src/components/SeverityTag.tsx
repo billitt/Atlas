@@ -1,16 +1,17 @@
-import { Tag } from "@carbon/react";
+import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 
-const SEVERITY_TYPES: Record<string, "red" | "gray" | "green"> = {
-  HIGH: "red",
-  MEDIUM: "gray",
-  LOW: "green",
+const SEVERITY_VARIANTS: Record<string, string> = {
+  HIGH: "bg-red-600 text-white hover:bg-red-600/90",
+  MEDIUM: "bg-yellow-600 text-white hover:bg-yellow-600/90",
+  LOW: "bg-green-600 text-white hover:bg-green-600/90",
 };
 
 export function SeverityTag({ severity }: { severity: string }) {
-  const type = SEVERITY_TYPES[severity.toUpperCase()] ?? "gray";
+  const variant =
+    SEVERITY_VARIANTS[severity.toUpperCase()] ??
+    "bg-secondary text-secondary-foreground";
   return (
-    <Tag type={type} size="sm">
-      {severity}
-    </Tag>
+    <Badge className={cn(variant)}>{severity}</Badge>
   );
 }

@@ -1,13 +1,3 @@
-import {
-  Column,
-  Grid,
-  Heading,
-  InlineNotification,
-  Select,
-  SelectItem,
-  SkeletonText,
-  TextArea,
-} from "@carbon/react";
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
@@ -17,6 +7,17 @@ import {
   type TraceDetail,
   type TraceListEntry,
 } from "@/api-client/client";
+import { AtlasLoading } from "@/components/AtlasLoading";
+import { Alert, AlertTitle } from "@/components/ui/alert";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 
 export function TraceViewerPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -76,47 +77,52 @@ export function TraceViewerPage() {
   );
 
   return (
-    <Grid>
-      <Column lg={16} md={8} sm={4}>
-        <Heading>Trace Viewer</Heading>
-        <p className="atlas-page-caption">
-          See exactly how any answer was reached, step by step.
-        </p>
-        {loadingList ? (
-          <SkeletonText heading={false} lineCount={2} />
-        ) : (
+    <div className="mx-auto max-w-7xl px-4 py-6">
+      <h1 className="text-2xl font-semibold tracking-tight">Trace Viewer</h1>
+      <p className="atlas-page-caption">
+        See exactly how any answer was reached, step by step.
+      </p>
+      {loadingList ? (
+        <AtlasLoading />
+      ) : (
+        <div className="mb-4 grid max-w-xl gap-2">
+          <Label htmlFor="trace-select">Select a trace</Label>
           <Select
-            id="trace-select"
-            labelText="Select a trace"
-            value={selectedId}
-            onChange={(event) => {
-              const value = event.target.value;
-              if (value) setSearchParams({ trace_id: value });
-              else setSearchParams({});
-            }}
+            value={selectedId || undefined}
+            onValueChange={(value) => setSearchParams({ trace_id: value })}
           >
-            <SelectItem value="" text="Choose a trace…" />
-            {traceOptions.map((option) => (
-              <SelectItem key={option.id} value={option.id} text={option.label} />
-            ))}
+            <SelectTrigger id="trace-select" className="w-full">
+              <SelectValue placeholder="Choose a trace…" />
+            </SelectTrigger>
+            <SelectContent>
+              {traceOptions.map((option) => (
+                <SelectItem key={option.id} value={option.id}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
           </Select>
-        )}
-        {error ? (
-          <InlineNotification kind="error" title={error} hideCloseButton />
-        ) : null}
-        {loadingDetail ? (
-          <SkeletonText heading={false} lineCount={10} className="atlas-trace-skeleton" />
-        ) : detail ? (
-          <TextArea
+        </div>
+      )}
+      {error ? (
+        <Alert variant="destructive" className="mb-4">
+          <AlertTitle>{error}</AlertTitle>
+        </Alert>
+      ) : null}
+      {loadingDetail ? (
+        <AtlasLoading />
+      ) : detail ? (
+        <div className="grid max-w-4xl gap-2">
+          <Label htmlFor="trace-tree">Execution steps</Label>
+          <Textarea
             id="trace-tree"
-            labelText="Execution steps"
             readOnly
             value={detail.tree}
             rows={18}
-            className="atlas-trace-output"
+            className="atlas-trace-output font-mono text-sm"
           />
-        ) : null}
-      </Column>
-    </Grid>
+        </div>
+      ) : null}
+    </div>
   );
 }

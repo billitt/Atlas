@@ -1,16 +1,3 @@
-import {
-  Button,
-  Column,
-  Grid,
-  Heading,
-  InlineNotification,
-  SkeletonText,
-  StructuredListBody,
-  StructuredListCell,
-  StructuredListRow,
-  StructuredListWrapper,
-  Tile,
-} from "@carbon/react";
 import { useCallback, useEffect, useState } from "react";
 
 import {
@@ -19,7 +6,11 @@ import {
   type AlertRule,
   type AlertRow,
 } from "@/api-client/client";
+import { AtlasLoading } from "@/components/AtlasLoading";
 import { SeverityTag } from "@/components/SeverityTag";
+import { Alert, AlertTitle } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 
 export function AlertsPage() {
   const [rules, setRules] = useState<AlertRule[]>([]);
@@ -64,71 +55,71 @@ export function AlertsPage() {
   };
 
   return (
-    <Grid>
-      <Column lg={16} md={8} sm={4}>
-        <Heading>Alerts</Heading>
-        <p className="atlas-page-caption">
-          Live warnings when market or geopolitical conditions shift.
-        </p>
-        <div className="atlas-inline-actions">
-          <Button kind="primary" onClick={handleCheck} disabled={checking}>
-            {checking ? "Checking…" : "Check now"}
-          </Button>
-        </div>
-        {checkMessage ? (
-          <InlineNotification kind="info" title={checkMessage} hideCloseButton />
-        ) : null}
-        {error ? (
-          <InlineNotification kind="error" title={error} hideCloseButton />
-        ) : null}
-        {loading ? (
-          <SkeletonText heading={false} lineCount={6} />
-        ) : (
-          <>
-            <Tile className="atlas-section-tile">
+    <div className="mx-auto max-w-7xl px-4 py-6">
+      <h1 className="text-2xl font-semibold tracking-tight">Alerts</h1>
+      <p className="atlas-page-caption">
+        Live warnings when market or geopolitical conditions shift.
+      </p>
+      <div className="atlas-inline-actions">
+        <Button onClick={handleCheck} disabled={checking}>
+          {checking ? "Checking…" : "Check now"}
+        </Button>
+      </div>
+      {checkMessage ? (
+        <Alert className="mb-4">
+          <AlertTitle>{checkMessage}</AlertTitle>
+        </Alert>
+      ) : null}
+      {error ? (
+        <Alert variant="destructive" className="mb-4">
+          <AlertTitle>{error}</AlertTitle>
+        </Alert>
+      ) : null}
+      {loading ? (
+        <AtlasLoading />
+      ) : (
+        <>
+          <Card className="atlas-section-tile mb-4">
+            <CardHeader className="pb-2">
               <h3 className="atlas-tile-title">Active rules</h3>
-              <StructuredListWrapper>
-                <StructuredListBody>
-                  {rules.map((rule) => (
-                    <StructuredListRow key={rule.id}>
-                      <StructuredListCell>
-                        <div className="atlas-alert-rule">
-                          <SeverityTag severity={rule.severity} />
-                          <strong>{rule.name}</strong>
-                        </div>
-                        <div className="atlas-list-sub">{rule.description}</div>
-                      </StructuredListCell>
-                    </StructuredListRow>
-                  ))}
-                </StructuredListBody>
-              </StructuredListWrapper>
-            </Tile>
-            <Tile className="atlas-section-tile">
+            </CardHeader>
+            <CardContent className="divide-y">
+              {rules.map((rule) => (
+                <div key={rule.id} className="py-3 first:pt-0 last:pb-0">
+                  <div className="atlas-alert-rule">
+                    <SeverityTag severity={rule.severity} />
+                    <strong>{rule.name}</strong>
+                  </div>
+                  <div className="atlas-list-sub">{rule.description}</div>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+          <Card className="atlas-section-tile">
+            <CardHeader className="pb-2">
               <h3 className="atlas-tile-title">Recent alerts</h3>
+            </CardHeader>
+            <CardContent>
               {recent.length === 0 ? (
                 <p className="atlas-tile-body">No recent alerts.</p>
               ) : (
-                <StructuredListWrapper>
-                  <StructuredListBody>
-                    {recent.map((row) => (
-                      <StructuredListRow key={row.id}>
-                        <StructuredListCell>
-                          <div className="atlas-alert-rule">
-                            <SeverityTag severity={row.severity} />
-                            <span>{row.timestamp}</span>
-                          </div>
-                          <div>{row.rule_name}</div>
-                          <div className="atlas-list-sub">{row.summary}</div>
-                        </StructuredListCell>
-                      </StructuredListRow>
-                    ))}
-                  </StructuredListBody>
-                </StructuredListWrapper>
+                <div className="divide-y">
+                  {recent.map((row) => (
+                    <div key={row.id} className="py-3 first:pt-0 last:pb-0">
+                      <div className="atlas-alert-rule">
+                        <SeverityTag severity={row.severity} />
+                        <span>{row.timestamp}</span>
+                      </div>
+                      <div>{row.rule_name}</div>
+                      <div className="atlas-list-sub">{row.summary}</div>
+                    </div>
+                  ))}
+                </div>
               )}
-            </Tile>
-          </>
-        )}
-      </Column>
-    </Grid>
+            </CardContent>
+          </Card>
+        </>
+      )}
+    </div>
   );
 }
