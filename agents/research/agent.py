@@ -92,7 +92,7 @@ JSON schema:
                     }
                 )
                 if _query_needs_filing_text(query):
-                    candidate = _first_periodic_filing(filings)
+                    candidate = await self._select_filing_to_read(query, filings)
                     if candidate:
                         cik = args.get("cik") or _cik_for_ticker(args.get("ticker"))
                         if cik:
@@ -115,6 +115,20 @@ JSON schema:
                                 filing_payload,
                                 {"accession_number": candidate["accession_number"], "cik": cik},
                             )
+                    else:
+                        fetched.append(
+                            {
+                                "tool": "filing_text",
+                                "arguments": {},
+                                "result": {
+                                    "text": None,
+                                    "note": (
+                                        "No filing in the returned list was selected "
+                                        "for text retrieval."
+                                    ),
+                                },
+                            }
+                        )
             elif tool == "full_text_search":
                 fetched.append(
                     {
@@ -147,7 +161,16 @@ Fetched EDGAR data:
 
 Instructions:
 - Ground claims in the filing data provided.
-- If only filing metadata is available, say so and avoid quoting unavailable text.
+- Distinguish filing METADATA (accession numbers, dates, form types) from filing
+  TEXT (the actual document body).
+- If no filing TEXT is present in the data above, you MUST NOT describe, summarize,
+  infer, or characterize what any filing likely contains, and MUST NOT use general
+  or prior knowledge of the company. State only which filings exist (their dates and
+  form types) and explicitly say that the risk-factor / disclosure TEXT was not
+  retrieved.
+- Never use speculative phrasing such as 'is expected to', 'typically includes',
+  'is likely to contain', or 'based on historical filings'. Report only what the
+  provided data actually contains.
 - Identify useful filings, risk-factor language, or disclosure gaps.
 - Keep the answer concise and include source references.
 
@@ -184,6 +207,73 @@ Return ONLY JSON:
         if confidence not in {"HIGH", "MEDIUM", "LOW"}:
             confidence = "LOW"
         return bool(verdict.get("passed", False)), str(verdict.get("feedback", "")), confidence  # type: ignore[return-value]
+
+    async def _select_filing_to_read(
+        self, query: str, filings: dict[str, Any]
+    ) -> dict[str, Any] | None:
+        """Ask the model which filing from the list should be opened for this query."""
+        filing_list = filings.get("filings", [])
+        compact = [
+            {
+                "accession_number": filing.get("accession_number"),
+                "filing_date": filing.get("filing_date"),
+                "form_type": filing.get("form_type"),
+            }
+            for filing in filing_list
+            if isinstance(filing, dict)
+        ]
+        if not compact:
+            return None
+
+        prompt = f"""You are selecting ONE SEC filing whose full text should be retrieved for analysis.
+
+User query: {query}
+
+Available filings (choose only from this list — do not invent accession numbers):
+{json.dumps(compact, indent=2)}
+
+Guidance (apply judgment to whatever forms are actually listed):
+- For risk-factor, disclosure, or annual-report questions, the relevant document is
+  usually the company's annual report — a 10-K for U.S. domestic filers or a 20-F for
+  foreign private issuers.
+- Periodic reports (10-Q) and current reports (6-K, 8-K) may also be relevant depending
+  on the query.
+- Routine insider forms (3, 4, 5) almost never contain risk-factor text.
+
+Return ONLY valid JSON:
+{{"accession_number": "<exact accession_number from the list above>", "reason": "short explanation"}}
+OR if none of the listed filings would contain text relevant to the query:
+{{"accession_number": null, "reason": "short explanation"}}
+"""
+        raw = chat(prompt)
+        try:
+            selected = _parse_json(raw)
+        except json.JSONDecodeError:
+            return None
+
+        accession = selected.get("accession_number")
+        if accession is None:
+            return None
+
+        accession_str = str(accession).strip()
+        if not accession_str:
+            return None
+
+        valid_accessions = {
+            str(f.get("accession_number", "")).strip()
+            for f in filing_list
+            if isinstance(f, dict) and f.get("accession_number")
+        }
+        if accession_str not in valid_accessions:
+            return None
+
+        for filing in filing_list:
+            if not isinstance(filing, dict):
+                continue
+            if str(filing.get("accession_number", "")).strip() == accession_str:
+                return filing
+
+        return None
 
     def _ingest_filing_text(self, filing_payload: dict[str, Any], args: dict[str, Any]) -> None:
         text = filing_payload.get("text")

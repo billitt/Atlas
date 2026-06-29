@@ -142,11 +142,17 @@ class A2AServer:
                 status: HTTPStatus = HTTPStatus.OK,
             ) -> None:
                 data = json.dumps(payload, indent=2).encode("utf-8")
-                self.send_response(status)
-                self.send_header("Content-Type", "application/json")
-                self.send_header("Content-Length", str(len(data)))
-                self.end_headers()
-                self.wfile.write(data)
+                # A client disconnect is a normal network event (e.g. the caller's
+                # HTTP timeout fired) and must never crash the request handler.
+                try:
+                    self.send_response(status)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Content-Length", str(len(data)))
+                    self.end_headers()
+                    self.wfile.write(data)
+                except (ConnectionAbortedError, ConnectionResetError, BrokenPipeError):
+                    print("[a2a] client disconnected before response was sent")
+                    return
 
             def log_message(self, format: str, *args: Any) -> None:
                 # Keep demo output focused on agent steps rather than access logs.

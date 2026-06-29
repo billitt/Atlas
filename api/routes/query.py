@@ -43,6 +43,9 @@ class QueryBody(BaseModel):
 #
 # Specialist agents emit `sources` in different shapes:
 #   - Market (mcp):        {"type": "mcp", "symbol": "TSM", "provider": ...}
+#   - Supply Chain (live): {"type": "mcp", "provider": "mcp-trade", "tool": "get_trade_data", ...}
+#   - Supply Chain (cache): {"type": "semantic_memory", "source": "comtrade_live",
+#     "tool": "get_trade_data", "fetched_at": ..., ...}
 #   - Geopolitical/Supply  {"type": "semantic_memory", "source": "seed_gdelt",
 #     (seed match):         "region": "Taiwan Strait", "date": ...}
 #   - Geopolitical/Supply  {"type": "model_knowledge"|"semantic_memory",
@@ -66,6 +69,8 @@ _EDGAR_TOOL_LABELS = {
     "filing_text": "Filing text",
     "full_text_search": "Full-text search",
 }
+
+_COMTRADE_TOOLS = frozenset({"get_trade_data", "get_tariffline", "preview_trade"})
 
 
 def _clean_str(value: Any) -> str | None:
@@ -102,9 +107,63 @@ def _normalize_source(source: Any) -> JsonDict | None:
             detail = _clean_str(source.get("provider")) or _clean_str(source.get("server"))
             return _src(val, detail, url)
 
-    # 2. Research / EDGAR fetched shape: {tool, arguments, result}
+    # 2a. MCP fetched sources: {type: mcp, provider, tool, arguments, fetched_at}
+    if source.get("type") == "mcp":
+        provider = _clean_str(source.get("provider")) or ""
+        mcp_tool = _clean_str(source.get("tool"))
+        _mcp_arguments = source.get("arguments") if isinstance(source.get("arguments"), dict) else {}
+        fetched_at = _clean_str(source.get("fetched_at"))
+        provider_labels = {
+            "mcp-trade": "UN Comtrade (live)",
+            "mcp-market-data": "Market Data (live)",
+            "mcp-edgar": "SEC EDGAR (live)",
+        }
+        if provider in provider_labels:
+            label = provider_labels[provider]
+        elif provider:
+            title = provider.replace("-", " ").replace("_", " ").title()
+            label = f"{title} (live)"
+        else:
+            label = "MCP (live)"
+        if mcp_tool and fetched_at:
+            tool_name = mcp_tool.replace("_", " ").capitalize()
+            date_part = fetched_at[:10] if len(fetched_at) >= 10 else fetched_at
+            detail = f"{tool_name} (fetched {date_part})"
+        elif mcp_tool:
+            detail = mcp_tool.replace("_", " ").capitalize()
+        elif fetched_at:
+            date_part = fetched_at[:10] if len(fetched_at) >= 10 else fetched_at
+            detail = f"(fetched {date_part})"
+        else:
+            detail = None
+        return _src(label, detail, url)
+
+    # 2b. Seed / semantic-memory match shape: {source, region, ticker, date}
+    seed = _clean_str(source.get("source"))
+    if seed:
+        if seed == "comtrade_live" and source.get("type") == "semantic_memory":
+            label = "UN Comtrade (cached)"
+            fetched_at = _clean_str(source.get("fetched_at"))
+            period = _clean_str(source.get("period"))
+            if fetched_at:
+                date_part = fetched_at[:10] if len(fetched_at) >= 10 else fetched_at
+                detail = f"(cached {date_part})"
+            elif period:
+                detail = f"period {period}"
+            else:
+                detail = None
+            return _src(label, detail, url)
+
+        base = _SEED_SOURCE_LABELS.get(seed, seed.replace("seed_", "").replace("_", " ").title())
+        qualifier = _clean_str(source.get("region")) or _clean_str(source.get("ticker"))
+        label = f"{base} — {qualifier}" if qualifier else base
+        return _src(label, _clean_str(source.get("date")), url)
+
+    # 2c. Research / EDGAR fetched shape: {tool, arguments, result}
     tool = _clean_str(source.get("tool"))
-    if tool:
+    if tool and tool not in _COMTRADE_TOOLS and (
+        tool in _EDGAR_TOOL_LABELS or "result" in source
+    ):
         args = source.get("arguments") if isinstance(source.get("arguments"), dict) else {}
         ident = (
             _clean_str(args.get("ticker"))
@@ -116,15 +175,7 @@ def _normalize_source(source: Any) -> JsonDict | None:
         detail = _clean_str(args.get("accession_number"))
         return _src(label, detail, url)
 
-    # 3. Seed / semantic-memory match shape: {source, region, ticker, date}
-    seed = _clean_str(source.get("source"))
-    if seed:
-        base = _SEED_SOURCE_LABELS.get(seed, seed.replace("seed_", "").replace("_", " ").title())
-        qualifier = _clean_str(source.get("region")) or _clean_str(source.get("ticker"))
-        label = f"{base} — {qualifier}" if qualifier else base
-        return _src(label, _clean_str(source.get("date")), url)
-
-    # 4. Note-only summary sources (model knowledge / semantic memory)
+    # 3. Note-only summary sources (model knowledge / semantic memory)
     src_type = _clean_str(source.get("type"))
     note = _clean_str(source.get("note"))
     if src_type == "model_knowledge":
@@ -132,7 +183,7 @@ def _normalize_source(source: Any) -> JsonDict | None:
     if src_type == "semantic_memory" or note:
         return _src("Semantic memory context", note)
 
-    # 5. url domain, then id, then a text excerpt
+    # 4. url domain, then id, then a text excerpt
     if url:
         return _src(_domain(url), None, url)
     sid = _clean_str(source.get("id"))

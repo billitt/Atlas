@@ -699,7 +699,6 @@ Taiwan Strait demo (Phase 13) — single scenario exercises all paths:
 Other demos:
 - `scripts/verify_ollama.py`
 - `examples/langgraph_hello.py`
-- `examples/beeai_hello.py` — Phase 0 framework verification only; production agents use `BaseAgent`, not BeeAI.
 - `examples/market_agent_demo.py`
 - `examples/a2a_demo.py`
 

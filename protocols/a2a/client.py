@@ -20,7 +20,9 @@ class A2AClient:
     def __init__(
         self,
         *,
-        timeout: float = 180.0,
+        # 300s headroom: a reflection retry runs two plan→execute→reflect passes,
+        # which can exceed lower timeouts on single-GPU hardware
+        timeout: float = 300.0,
         auth_token: str | None = None,
         verify_tls: bool | None = None,
     ) -> None:

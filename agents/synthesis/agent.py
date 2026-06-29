@@ -34,7 +34,9 @@ class SynthesisAgent:
         episodic_memory: EpisodicMemory | None = None,
     ) -> None:
         self.agent_cards = agent_cards
-        self.a2a = a2a_client or A2AClient(timeout=240.0)
+        # 300s headroom: a reflection retry runs two plan→execute→reflect passes,
+        # which can exceed lower timeouts on single-GPU hardware
+        self.a2a = a2a_client or A2AClient(timeout=300.0)
         self.card_by_key = {agent_key(card): card for card in agent_cards}
         self.episodic_memory = episodic_memory or EpisodicMemory()
 
