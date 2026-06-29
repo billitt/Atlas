@@ -1,10 +1,10 @@
 # CLAUDE.md — Code Context for Claude
 
-> **Project Complete (Phase 16).** All 16 phases implemented. Interview docs in `docs/`. Security: `docs/SECURITY.md`. Verification: `docs/VERIFICATION.md`. Demo: `atlas-taiwan-demo`.
+> **Project complete through Phase 16.** Docs in `docs/`. Security: `docs/SECURITY.md`. Verification: `docs/VERIFICATION.md`. Demo: `atlas-taiwan-demo`.
 
-This file is maintained by Cursor after each phase. Claude reads it to understand the codebase without re-reading every file.
+Last updated: 2026-06-28 (post–Phase 16 maintenance)
 
-Last updated: Phase 16.1 (2026-06-28)
+This file is maintained after substantive code changes. Claude reads it for file-level context without re-reading the whole repo.
 
 ---
 
@@ -43,11 +43,9 @@ User (Typer CLI `atlas` / Carbon web UI via `api/` + `web/`)
           -> Semantic Memory cache (`source=comtrade_live`) when live fetch succeeds
           -> Resilient setup: continues with cache/model path if :8003 unavailable at startup
         -> Research & Filing Agent :9004 (agents/research/agent.py)
-          -> Semantic Memory ingest for filing text (memory/semantic.py)
-          -> MCP client (protocols/mcp/client.py)
-            -> Rust MCP server :8002 (rust/mcp-edgar/)
-              -> SEC EDGAR submissions, Archives, full-text search APIs
-          -> Granite via Ollama (services/llm.py)
+          -> MCP client -> Rust MCP server :8002 (rust/mcp-edgar/) -> SEC EDGAR
+          -> Model-driven filing selection (_select_filing_to_read) when query needs text
+          -> Semantic Memory ingest for fetched filing text (memory/semantic.py)
       -> Synthesis Agent queries Episodic Memory for similar briefings
       -> Granite synthesizes unified briefing
       -> Guardian Agent validates grounding and confidence (agents/guardian/agent.py)
@@ -99,7 +97,7 @@ Taiwan Strait demo (Phase 13) — single scenario exercises all paths:
 
 ### Rust — Data Layer
 
-**rust/Cargo.toml** — Workspace root. Members: `ollama-check`, `mcp-common`, `mcp-market-data`, `mcp-edgar`.
+**rust/Cargo.toml** — Workspace root. Members: `ollama-check`, `mcp-common`, `mcp-market-data`, `mcp-edgar`, `mcp-trade`.
 
 **rust/mcp-common/** — Shared MCP security middleware (Phase 15).
 - `bind_addr(port) -> SocketAddr` — `ATLAS_BIND_HOST`, default `127.0.0.1`
@@ -401,39 +399,25 @@ Taiwan Strait demo (Phase 13) — single scenario exercises all paths:
 - Uses Granite model knowledge when no seed context; grounds in semantic memory when Taiwan scenario ingested.
 
 **agents/supply_chain/agent.py**
-- `class SupplyChainAgent(BaseAgent)`
-- Required `mcp_client: McpClient` (Comtrade on `:8003`); URL from `protocols.mcp.endpoints.mcp_trade_url()`.
-- `semantic_memory: SemanticMemory` — live Comtrade cache (`source=comtrade_live`), not seed fixtures.
-- `setup() -> None` — loads Comtrade tools; try/except so A2A server starts even when MCP is down.
-- `plan()` derives Comtrade params (M49 codes, HS cmdCode, period).
-- `execute()` — live MCP fetch → cache to ChromaDB on success; on failure query `comtrade_live` cache; insufficient → LOW with no invented figures.
-- `reflect()` — downgrades confidence when `used_cache`; forces LOW on insufficient data.
-- **agents/supply_chain/tools.py** — `call_get_trade_data`, `call_get_tariffline`, MCP helpers.
+- `class SupplyChainAgent(BaseAgent)` — live UN Comtrade via `mcp-trade` (`:8003`).
+- `plan()` — Comtrade params (M49, HS, period); year fallback when annual data lags.
+- `execute()` — live MCP → ChromaDB cache (`source=comtrade_live`); cache fallback; insufficient → LOW, no invented figures.
+- `reflect()` — downgrades when cache used; forces LOW on insufficient data.
+- **agents/supply_chain/tools.py** — `call_get_trade_data`, `call_get_tariffline`.
 
 **rust/mcp-trade/** — UN Comtrade MCP server on `:8003`.
 - `src/main.rs` — `dotenvy::dotenv()` loads `.env`; reads `ATLAS_COMTRADE_API_KEY`; logs keyed vs preview-only mode.
 - `src/mcp.rs` — JSON-RPC tools: `get_trade_data`, `get_tariffline`, `preview_trade`.
 - `src/comtrade.rs` — Comtrade API client, 250 ms throttle, preview fallback on missing/rejected key.
 
-**agents/research/agent.py** (214 lines)
-- `class ResearchFilingAgent(BaseAgent)`
-- SEC filing specialist backed by `mcp-edgar`.
-- Constant: `DEFAULT_EDGAR_MCP_URL = "http://localhost:8002"`.
-- `__init__(mcp_client: McpClient, *, max_retries: int = 2, semantic_memory: SemanticMemory | None = None) -> None`
-- `setup() -> None`
-- `plan(query: str) -> dict[str, Any]`
-- `execute(query: str, plan: dict[str, Any]) -> AgentResult`
-- `reflect(query: str, draft: AgentResult) -> tuple[bool, str, Confidence]`
-- `_ingest_filing_text(filing_payload: dict[str, Any], args: dict[str, Any]) -> None`
-- Helpers:
-  - `_fallback_ticker(query: str) -> str`
-  - `_query_needs_filing_text(query: str) -> bool`
-  - `_first_periodic_filing(filings: dict[str, Any]) -> dict[str, Any] | None`
-  - `_cik_for_ticker(ticker: str | None) -> str | None`
-  - `_parse_json(text: str) -> dict[str, Any]`
-- Dependencies: `agents.base`, `agents.research.tools`, `memory.semantic.SemanticMemory`, `protocols.mcp.client.McpClient`, `services.llm.chat`.
-- Called by: `examples/edgar_demo.py`, `examples/synthesis_demo.py` through `A2AServer`.
-- Memory behavior: after fetching 10-K/10-Q/20-F text, stores filing text chunks in ChromaDB semantic memory with metadata `source=sec_edgar`, `accession_number`, `cik`.
+**agents/research/agent.py**
+- `class ResearchFilingAgent(BaseAgent)` — SEC filings via `mcp-edgar` (`protocols.mcp.endpoints.mcp_edgar_url()`).
+- `plan()` → JSON `tool_calls` for EDGAR MCP tools.
+- `execute()` → runs tool calls; when `_query_needs_filing_text(query)`, calls `_select_filing_to_read()` (model picks accession from list) then `filing_text` MCP fetch; on no selection appends `text: null` marker to sources.
+- `_select_filing_to_read(query, filings)` — LLM JSON pick; validates accession against list.
+- `_first_periodic_filing()` — legacy helper (10-K/10-Q/20-F); not used in execute path.
+- Analysis prompt forbids confabulation when filing body absent.
+- `_ingest_filing_text()` → ChromaDB (`source=sec_edgar`).
 
 **agents/research/tools.py** (54 lines)
 - MCP helpers for EDGAR tools.
@@ -579,7 +563,14 @@ Taiwan Strait demo (Phase 13) — single scenario exercises all paths:
 - `_fetch_agent_cards_status()` — probe `:9001`–`:9004` agent cards
 - `boot_agent_runtime()` / `shutdown_agent_servers()` — A2A startup for API lifespan
 
-**api/routes/** — `status`, `query` (SSE), `agents`, `briefings`, `alerts`, `traces`
+**api/routes/query.py**
+- `POST /query` — SSE stream (`text/event-stream`) from LangGraph `astream`; not WebSockets.
+- `_normalize_source()` / `_normalize_sources()` — collapse specialist source dicts to UI `{label, detail?, url?}`; Comtrade cache (`comtrade_live` + `tool`) before EDGAR heuristic; live Comtrade `type: mcp`, `provider: mcp-trade`.
+- `_compact_specialist()` — per-agent tiles for web UI.
+
+**api/routes/** — `status`, `briefings`, `alerts`, `agents`, `traces`
+
+**tests/api/test_query_sources.py** — unit tests for `_normalize_source` (Comtrade live/cached, EDGAR, market).
 
 **web/** — Carbon React dashboard (Query, Briefings, Alerts, Agent Status, Trace Viewer)
 - Dev: `cd web && npm run dev` → `http://127.0.0.1:5173` (proxies to API `:8787`)
@@ -863,7 +854,7 @@ Other demos:
 - Verification: Ruff check and UI import smoke test completed successfully.
 
 ### Phase 13 — Taiwan Strait Demo Scenario
-- Created `data/seed_data/taiwan_scenario.json`, `tsmc_filing_excerpt.txt`, `trade_flow_data.json` — simulated GDELT, filing, and trade-flow seed data.
+- Created `data/seed_data/taiwan_scenario.json`, `tsmc_filing_excerpt.txt` — simulated GDELT and filing excerpt (trade-flow seed later removed in Phase 16).
 - Created `ingestion/seed_loader.py` with `load_taiwan_scenario()` and `seed_alert_context()`.
 - Created `examples/taiwan_demo.py` — six-step end-to-end demo (seed, alert, synthesis, briefing, trace, summary).
 - Created `data/sample_scenarios/taiwan_demo_expected_output.md` and `docs/DEMO_SCRIPT.md`.
@@ -914,6 +905,11 @@ Other demos:
 - Wired `cli/main.py` `_collect_status()`, `api/config.py`, `api/runtime.py`, agent default URLs, `examples/_demo_infra.py`.
 - Resilient `SupplyChainAgent.setup()` — no crash when `:8003` is down at A2A startup.
 - Docs sweep: PRD, VERIFICATION, SECURITY, PROTOCOLS, AGENTS, demo prerequisites.
+
+### Post–16.1 maintenance
+- **Research agent** — `_select_filing_to_read()` replaces hardcoded 10-K/10-Q/20-F gate; anti-confabulation analysis prompt; `text: null` marker when no filing text fetched.
+- **API source labels** — `api/routes/query.py` fixes Comtrade cache sources mislabeled as SEC EDGAR in web UI.
+- **tests/api/test_query_sources.py** — regression tests for source normalization.
 
 ---
 
@@ -1014,7 +1010,7 @@ ingestion/seed_loader.py
   -> memory/semantic.py -> services/embeddings.py -> Ollama /api/embed
   -> data/seed_data/taiwan_scenario.json
   -> data/seed_data/tsmc_filing_excerpt.txt
-  -> data/seed_data/trade_flow_data.json
+  (trade-flow seed removed in Phase 16 — Supply Chain uses live Comtrade)
 
 examples/taiwan_demo.py
   -> ingestion/seed_loader.py (load_taiwan_scenario, seed_alert_context)

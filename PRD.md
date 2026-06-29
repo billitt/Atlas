@@ -2,7 +2,7 @@
 
 **Atlas** is a global business intelligence system powered by autonomous AI agents that communicate via industry-standard protocols. This document is the current plan and master reference point. Nothing here is sacred except the core goal.
 
-**Status (June 2026):** Phases **0–16 are complete**. All core pipelines are implemented and demo-verified. See [README.md](README.md) for quick start and [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md) for the Taiwan Strait interview walkthrough.
+**Status (June 2026):** Phases **0–16 complete**. Three Rust MCP servers, four Python specialist agents, LangGraph synthesis, CLI and web UI. See [README.md](README.md) and [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md).
 
 ---
 
@@ -10,15 +10,13 @@
 
 Build a system where specialized AI agents continuously gather, analyze, and synthesize global business intelligence — financial markets, geopolitical signals, trade and supply chain data, public filings, and news — into a unified knowledge base that a user can query in plain English, receive scheduled briefings from, and get real-time alerts when conditions change.
 
-This is a **portfolio project** designed with:
+This is a **portfolio project** demonstrating:
 
-- Agentic AI architecture using emerging industry standards (MCP, A2A)
-- Multi-agent orchestration with explicit state management (LangGraph)
-- RAG pipelines with three-tier memory architecture
-- Reflection and self-correction patterns
-- Full observability and decision traceability
-- Production-grade engineering on a fully open-source, on-prem stack
-- **Polyglot systems design** — Rust for the performance-critical data layer (MCP servers, ingestion), Python for the intelligence layer (agents, orchestration, UI)
+- Multi-agent orchestration (LangGraph) with MCP/A2A protocols
+- RAG with semantic + episodic memory
+- Specialist reflection loops and a separate Guardian validator
+- OpenTelemetry tracing and run logs
+- Rust data layer + Python agent layer on local Granite
 
 ---
 
@@ -91,7 +89,7 @@ This split reflects production practice: the hot path is Rust, the reasoning lay
                     └─────────────────┘
 ```
 
-**As built:** Live MCP servers are `mcp-market-data` (Yahoo) and `mcp-edgar` (SEC). Geopolitical and trade data for the Taiwan demo come from seed files ingested into semantic memory; additional Rust MCP crates remain planned.
+**As built:** Live MCP servers are `mcp-market-data` (Yahoo, `:8001`), `mcp-edgar` (SEC, `:8002`), and `mcp-trade` (UN Comtrade, `:8003`). Geopolitical context for the Taiwan demo uses seed files in semantic memory; additional MCP crates (GDELT, macro, gov) remain planned.
 
 ## Language Boundary
 
@@ -155,6 +153,7 @@ No agent passes output downstream without first critiquing its own work. The Gua
 
 - Domain: SEC filings, earnings reports, annual reports, regulatory filings
 - **As built MCP:** SEC EDGAR via `mcp-edgar` (:8002) — `company_filings`, `filing_text`, `full_text_search`
+- **Filing text selection:** When the query needs document body (risk factors, disclosures), the model picks one filing from the returned list (`_select_filing_to_read`); no hardcoded 10-K/10-Q/20-F gate. If no filing is selected or text is not fetched, analysis must state that explicitly — no speculative filler.
 - **Planned MCP:** Open Corporates, government data portals
 - Capabilities: Key financial extraction, sentiment analysis on forward-looking statements, filing diff detection (what changed from last quarter)
 - Reflection: Verifies extracted numbers against source documents, flags ambiguous language, checks for selective quoting
@@ -233,7 +232,7 @@ The end-to-end demo walks through a single compelling scenario that exercises ev
 3. **Geopolitical Risk Agent** queries semantic memory for GDELT-style seed context → self-reflects → publishes via A2A
 4. **Supply Chain Agent** fetches live UN Comtrade data via `mcp-trade` (:8003), caches rows in semantic memory → publishes via A2A
 5. **Market Intelligence Agent** pulls live TSM quote from Yahoo Finance via `mcp-market-data` MCP → publishes via A2A
-6. **Research Agent** pulls TSMC filings from EDGAR via `mcp-edgar` MCP → publishes via A2A
+6. **Research Agent** pulls TSMC filings from EDGAR; model selects which filing to fetch as text → publishes via A2A
 7. **Synthesis Agent** collects outputs → generates unified briefing → Guardian validates with confidence levels
 8. **Scheduled briefing** runs for topic "Taiwan Strait semiconductor risk" with episodic delta
 9. **OpenTelemetry trace** links run log, CLI output, and dashboard Trace Viewer via `trace_id`
@@ -340,7 +339,7 @@ atlas/
 │   ├── seed_data/           ← Taiwan Strait demo seed files
 │   └── sample_scenarios/    ← Expected demo output reference
 ├── docs/                    ← ARCHITECTURE, AGENTS, PROTOCOLS, MEMORY, DATA_SOURCES, DEMO_SCRIPT, VERIFICATION, DEVLOG
-├── tests/
+├── tests/                   ← pytest (agents, protocols, api source normalization)
 ├── scripts/
 ├── pyproject.toml
 ├── .env.example
@@ -376,9 +375,10 @@ All phases **0–16 are complete** (June 2026).
 | 14 | ✅ | Polish & presentation | Docs set, README, ruff/clippy cleanup, VERIFICATION checklist | ADR-011: Doc structure |
 | 15 | ✅ | Security hardening | Localhost bind, optional MCP/A2A auth, rate limits, TLS | ADR-012 |
 | 16 | ✅ | UN Comtrade MCP | `mcp-trade` on :8003, live SupplyChainAgent + ChromaDB cache | ADR-013 |
-| 16.1 | ✅ | MCP wiring | `protocols/mcp/endpoints.py`, status/API prerequisites, resilient supply-chain setup | |
+| 16.1 | ✅ | MCP wiring | `protocols/mcp/endpoints.py`, resilient supply-chain setup | |
+| 16.2 | ✅ | Agent + UI fixes | Research model-driven filing pick; API source labels (Comtrade vs EDGAR) | |
 
-Phases are sequential by default but can be reordered if priorities shift. Each phase produces something runnable and testable — no big-bang integration at the end.
+Phases are sequential by default but can be reordered if priorities shift. Each phase should produce something runnable — no big-bang integration at the end.
 
 ---
 
@@ -413,7 +413,5 @@ Phases are sequential by default but can be reordered if priorities shift. Each 
 - **Keep explanations tight.** I have an ISyE background, McKinsey consulting experience, and hands-on ML/LLM skills. Don't over-explain fundamentals, but do explain non-obvious architectural choices.
 - **I'm learning Rust.** Explain Rust idioms and patterns when they come up. Don't assume Rust fluency — I'm building this partly to learn the language. Python is my strong side.
 - **Portfolio-quality matters.** Code should be clean, documented, and structured well enough that a hiring manager or technical interviewer can read it. README, docstrings, and clear commit history are not afterthoughts.
-- **Protocol implementation is the differentiator.** MCP and A2A are what set Atlas apart from generic agent projects. Get these right and everything else follows.
-- **The language boundary is the second differentiator.** Rust MCP servers + Python agents is what separates this from every other LangGraph project.
-- **The demo tells a story.** Every architectural decision should be visible in the Taiwan Strait demo scenario. If a feature can't be demonstrated, question whether it belongs in this phase.
+- **Web UI query path:** `POST /api/query` streams progress via **HTTP SSE** (not WebSockets). Source labels normalized in `api/routes/query.py` for the dashboard.
 - **This relates to but is separate from Enterprise Profiler.** They share some stack (Granite, ChromaDB, Docling; BeeAI only as an evaluated framework) but are independent projects with different goals. Cross-pollinate ideas where it makes sense but don't couple them.

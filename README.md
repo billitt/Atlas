@@ -1,6 +1,6 @@
 # Atlas
 
-**A local-first, protocol-native AI intelligence system: Rust MCP data services + Python A2A agents + LangGraph orchestration + Granite on Ollama.**
+Local-first multi-agent intelligence demo: Rust MCP data servers, Python A2A specialists, LangGraph synthesis, Granite on Ollama.
 
 ## Quick Start
 
@@ -20,47 +20,34 @@ Prerequisites: Python 3.11+, Rust stable, [Ollama](https://ollama.com/download).
 
 ---
 
-## What Makes This Different
+## Architecture
 
-| Differentiator | Detail |
-|----------------|--------|
-| **Rust + Python polyglot** | Rust owns data fetching (MCP servers); Python owns agent reasoning and orchestration |
-| **Protocol-native** | MCP for agent↔data, A2A for agent↔agent — not a monolithic prompt chain |
-| **Reflection at every agent** | Plan → execute → reflect loop on all specialists; failed audits trigger retry |
-| **Full OpenTelemetry tracing** | Every LLM call, MCP fetch, and A2A delegation is a span with `trace_id` linkage |
-| **On-prem, zero cloud** | Granite via Ollama, ChromaDB, SQLite — no API keys or cloud LLM dependencies |
+| Layer | Role |
+|-------|------|
+| Rust MCP (`:8001`–`:8003`) | Market quotes, SEC EDGAR, UN Comtrade |
+| Python specialists (`:9001`–`:9004`) | Plan → execute → reflect; delegate via A2A |
+| LangGraph + Synthesis | DAG plan, merge, Guardian validation |
+| Memory | ChromaDB semantic, SQLite episodic |
+| UI | Typer CLI or Carbon web UI + FastAPI (`atlas-api`) |
 
-Atlas is a portfolio-grade demonstration of hybrid systems, agentic AI architecture, and auditable intelligence pipelines.
-
-**Documentation:** [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · [docs/AGENTS.md](docs/AGENTS.md) · [docs/PROTOCOLS.md](docs/PROTOCOLS.md) · [docs/MEMORY.md](docs/MEMORY.md) · [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md) · [docs/VERIFICATION.md](docs/VERIFICATION.md)
-
-See [docs/DEVLOG.md](docs/DEVLOG.md) for ADRs. See [CLAUDE.md](CLAUDE.md) for file-level context.
+Query streaming uses **HTTP SSE**, not WebSockets. Docs: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · [docs/AGENTS.md](docs/AGENTS.md) · [docs/PROTOCOLS.md](docs/PROTOCOLS.md) · [docs/MEMORY.md](docs/MEMORY.md) · [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md) · [docs/VERIFICATION.md](docs/VERIFICATION.md) · [docs/DEVLOG.md](docs/DEVLOG.md) · [CLAUDE.md](CLAUDE.md)
 
 ---
 
 ## Current Status
 
-Phases **0–15 are complete**. All components are implemented and demo-verified.
+Phases **0–16** implemented. Taiwan Strait demo exercises the full stack.
 
-| Phase | Status | What Works |
-|-------|--------|------------|
-| 0 | Complete | Python environment, Ollama, Granite, LangGraph hello world |
-| 1A | Complete | Rust `ollama-check` binary |
-| 1B | Complete | Rust MCP market-data server on `:8001` |
-| 2 | Complete | Market Intelligence Agent |
-| 3 | Complete | A2A Agent Cards, discovery, HTTP JSON-RPC delegation |
-| 4 | Complete | Synthesis Agent + LangGraph multi-agent coordination |
-| 5 | Complete | Three-tier memory: ChromaDB, SQLite, working scratchpad |
-| 6 | Complete | Research & Filing Agent + EDGAR MCP on `:8002` |
-| 7 | Complete | Guardian Agent in-graph validation |
-| 8 | Complete | Scheduled briefings via `BriefingEngine` + APScheduler |
-| 9 | Complete | Real-time alerts via `AlertEngine` + `AlertWatcher` |
-| 10 | Complete | OpenTelemetry tracing across all pipelines |
-| 11 | Complete | Typer CLI (`atlas`) |
-| 12 | Complete | Carbon web UI + FastAPI API (`atlas-api`, `web/`) |
-| 13 | Complete | Taiwan Strait end-to-end demo scenario |
-| 14 | Complete | Polish, documentation, verification checklist |
-| 15 | Complete | Production security: localhost bind, optional bearer auth, rate limit, TLS, input validation |
+| Phase | Focus |
+|-------|--------|
+| 0–5 | Environment, MCP market data, agents, A2A, memory |
+| 6–7 | EDGAR MCP, Research agent, Guardian |
+| 8–9 | Scheduled briefings, alerts |
+| 10–11 | OpenTelemetry, Typer CLI |
+| 12 | Carbon web UI + FastAPI (replaced Streamlit) |
+| 13–14 | Taiwan demo, docs, verification |
+| 15 | Localhost bind, optional auth, rate limits |
+| 16 | `mcp-trade` Comtrade MCP, live Supply Chain agent |
 
 ---
 
@@ -185,7 +172,7 @@ atlas traces list
 atlas traces show <trace_id>
 ```
 
-**Prerequisites for query/briefing:** Ollama + both MCP servers. CLI auto-starts A2A agents.
+**Prerequisites for query/briefing:** Ollama + all three MCP servers (`:8001`–`:8003`). CLI/API auto-start A2A agents on `:9001`–`:9004`.
 
 ---
 
@@ -245,6 +232,7 @@ Full list in `pyproject.toml` `[project.scripts]`.
 | ADR-010 | 10 | Trace storage and retention |
 | ADR-011 | 14 | Documentation structure for interviews |
 | ADR-012 | 15 | Security hardening model |
+| ADR-013 | 16 | Live Comtrade MCP + Supply Chain cache |
 
 Full ADR text: [docs/DEVLOG.md](docs/DEVLOG.md)
 
@@ -258,6 +246,8 @@ Licensed under the MIT License — see [LICENSE](LICENSE).
 
 ## Notes
 
-- Supply Chain Agent fetches live UN Comtrade data via `mcp-trade` (:8003) with ChromaDB cache fallback; geopolitical agent uses GDELT seed data in semantic memory until a live GDELT MCP is built.
-- Rust MCP servers must run before queries requiring live market or filing data.
-- Verification checklist: [docs/VERIFICATION.md](docs/VERIFICATION.md)
+- **Geopolitical:** GDELT-style seed in semantic memory; live GDELT MCP not built.
+- **Supply Chain:** Live UN Comtrade via `mcp-trade` (`:8003`); ChromaDB cache on success; preview mode without API key.
+- **Research:** Model picks which filing to open from EDGAR list; analysis must not invent text when filing body was not fetched.
+- **Web UI sources:** Normalized in `api/routes/query.py` (Comtrade cache vs EDGAR vs market).
+- Run logs: `runs/`; verification: [docs/VERIFICATION.md](docs/VERIFICATION.md)

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+import time
 from datetime import datetime, timezone
 from typing import Any, Literal
 
@@ -14,6 +15,38 @@ from memory.semantic import SemanticMemory
 from protocols.mcp.client import McpClient
 from protocols.mcp.endpoints import mcp_trade_url
 from services.llm import chat
+
+_DEBUG_LOG_PATH = "debug-ea8763.log"
+
+
+def _debug_log(
+    location: str,
+    message: str,
+    data: dict[str, Any],
+    *,
+    hypothesis_id: str,
+    run_id: str = "pre-fix",
+) -> None:
+    # region agent log
+    try:
+        with open(_DEBUG_LOG_PATH, "a", encoding="utf-8") as log_file:
+            log_file.write(
+                json.dumps(
+                    {
+                        "sessionId": "ea8763",
+                        "timestamp": int(time.time() * 1000),
+                        "location": location,
+                        "message": message,
+                        "data": data,
+                        "hypothesisId": hypothesis_id,
+                        "runId": run_id,
+                    }
+                )
+                + "\n"
+            )
+    except OSError:
+        pass
+    # endregion
 
 DEFAULT_COMTRADE_MCP_URL = mcp_trade_url()
 
@@ -211,9 +244,48 @@ them with codes derived from the query, do not echo them):
 """
         raw = chat(prompt)
         try:
-            return _parse_json(raw)
-        except json.JSONDecodeError:
-            return _fallback_plan_from_query(query)
+            parsed = _parse_json(raw)
+            print("[supply_chain.plan] LLM plan parsed OK")
+            # region agent log
+            _debug_log(
+                "agent.py:plan",
+                "LLM plan parsed OK",
+                {
+                    "plan_source": "llm",
+                    "rationale": parsed.get("rationale"),
+                    "arguments": parsed.get("arguments"),
+                    "raw_len": len(raw),
+                },
+                hypothesis_id="H2",
+            )
+            # endregion
+            return parsed
+        except json.JSONDecodeError as exc:
+            print(
+                "[supply_chain.plan] LLM plan did NOT parse as JSON; "
+                f"falling back to keyword matcher. Error: {exc}"
+            )
+            print("[supply_chain.plan] --- RAW LLM OUTPUT (first 800 chars) ---")
+            print(raw[:800])
+            print("[supply_chain.plan] --- END RAW ---")
+            fallback = _fallback_plan_from_query(query)
+            # region agent log
+            _debug_log(
+                "agent.py:plan",
+                "LLM plan parse failed; keyword fallback used",
+                {
+                    "plan_source": "fallback",
+                    "parse_error": str(exc),
+                    "raw_preview": raw[:800],
+                    "raw_len": len(raw),
+                    "matched_countries": _match_country_codes(query),
+                    "fallback_arguments": fallback.get("arguments"),
+                    "fallback_rationale": fallback.get("rationale"),
+                },
+                hypothesis_id="H1",
+            )
+            # endregion
+            return fallback
 
     async def execute(self, query: str, plan: dict[str, Any]) -> AgentResult:
         print("[supply_chain.execute] Fetching live Comtrade data...")
@@ -229,6 +301,19 @@ them with codes derived from the query, do not echo them):
         # step back up to two earlier years if the year has no published rows yet.
         requested_period = str(args.get("period") or _latest_comtrade_year())
         candidate_years = self._candidate_years(requested_period)
+        # region agent log
+        _debug_log(
+            "agent.py:execute",
+            "execute started with plan arguments",
+            {
+                "tool": tool,
+                "arguments": args,
+                "candidate_years": candidate_years,
+                "plan_rationale": plan.get("rationale"),
+            },
+            hypothesis_id="H2",
+        )
+        # endregion
 
         for year in candidate_years:
             try:
@@ -236,10 +321,30 @@ them with codes derived from the query, do not echo them):
             except Exception as exc:
                 mcp_error = str(exc)
                 print(f"[supply_chain.execute] MCP call failed: {exc}")
+                # region agent log
+                _debug_log(
+                    "agent.py:execute",
+                    "MCP call raised exception",
+                    {"year": year, "error": str(exc), "is_429": "429" in str(exc)},
+                    hypothesis_id="H3",
+                )
+                # endregion
                 break
 
             if payload.get("error"):
                 mcp_error = str(payload["error"])
+                # region agent log
+                _debug_log(
+                    "agent.py:execute",
+                    "MCP payload returned error",
+                    {
+                        "year": year,
+                        "error": str(payload["error"]),
+                        "is_429": "429" in str(payload["error"]),
+                    },
+                    hypothesis_id="H3",
+                )
+                # endregion
                 break
 
             rows = payload.get("rows") or []
@@ -251,6 +356,19 @@ them with codes derived from the query, do not echo them):
             print(f"[supply_chain.execute] No Comtrade rows for period {year}; stepping back")
 
         cache_context, cache_sources, fetched_at = self._cached_comtrade_context(query)
+        # region agent log
+        _debug_log(
+            "agent.py:execute",
+            "live fetch exhausted; cache probe result",
+            {
+                "mcp_error": mcp_error,
+                "cache_hit": bool(cache_context),
+                "cache_source_count": len(cache_sources),
+                "years_attempted": candidate_years,
+            },
+            hypothesis_id="H4",
+        )
+        # endregion
         if cache_context:
             self._data_mode = "cache"
             self._used_cache = True
@@ -510,15 +628,45 @@ Return ONLY valid JSON:
 
 
 def _parse_json(text: str) -> dict[str, Any]:
+    original = text
     text = text.strip()
     fence = re.search(r"```(?:json)?\s*([\s\S]*?)```", text)
+    used_fence = bool(fence)
     if fence:
         text = fence.group(1).strip()
     try:
         return json.loads(text)
-    except json.JSONDecodeError:
+    except json.JSONDecodeError as direct_exc:
         start = text.find("{")
         end = text.rfind("}")
         if start >= 0 and end > start:
-            return json.loads(text[start : end + 1])
+            try:
+                return json.loads(text[start : end + 1])
+            except json.JSONDecodeError as slice_exc:
+                # region agent log
+                _debug_log(
+                    "agent.py:_parse_json",
+                    "brace-slice parse failed",
+                    {
+                        "used_fence": used_fence,
+                        "direct_error": str(direct_exc),
+                        "slice_error": str(slice_exc),
+                        "text_preview": original[:400],
+                    },
+                    hypothesis_id="H1",
+                )
+                # endregion
+                raise slice_exc from direct_exc
+        # region agent log
+        _debug_log(
+            "agent.py:_parse_json",
+            "direct parse failed; no usable braces",
+            {
+                "used_fence": used_fence,
+                "direct_error": str(direct_exc),
+                "text_preview": original[:400],
+            },
+            hypothesis_id="H1",
+        )
+        # endregion
         raise
