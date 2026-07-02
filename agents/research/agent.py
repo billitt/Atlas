@@ -6,7 +6,7 @@ import json
 import re
 from typing import Any
 
-from agents.base import AgentResult, BaseAgent, Confidence
+from agents.base import AgentResult, BaseAgent, Confidence, normalize_confidence, parse_json_from_llm
 from agents.formatting import MARKDOWN_FORMAT_INSTRUCTIONS
 from agents.research import tools as research_tools
 from memory.semantic import SemanticMemory
@@ -26,10 +26,16 @@ class ResearchFilingAgent(BaseAgent):
         *,
         max_retries: int = 2,
         semantic_memory: SemanticMemory | None = None,
+        max_companies_with_text: int = 2,
     ) -> None:
         super().__init__(max_retries=max_retries)
         self.mcp = mcp_client
         self.semantic_memory = semantic_memory or SemanticMemory()
+        # Reading + embedding a filing body for every company is the dominant
+        # wall-clock cost (one extra Granite selection call per company). Cap how
+        # many companies trigger the full filing-text path; the rest return
+        # metadata only.
+        self.max_companies_with_text = max_companies_with_text
 
     async def setup(self) -> None:
         await research_tools.load_tools(self.mcp)
@@ -60,7 +66,7 @@ JSON schema:
 """
         raw = chat(prompt)
         try:
-            return _parse_json(raw)
+            return parse_json_from_llm(raw)
         except json.JSONDecodeError:
             return {
                 "tool_calls": [
@@ -74,6 +80,7 @@ JSON schema:
 
     async def execute(self, query: str, plan: dict[str, Any]) -> AgentResult:
         fetched: list[dict[str, Any]] = []
+        companies_read = 0
         for call in plan.get("tool_calls", []):
             tool = call.get("tool")
             args = call.get("arguments") or {}
@@ -91,7 +98,14 @@ JSON schema:
                         "result": filings,
                     }
                 )
-                if _query_needs_filing_text(query):
+                if _query_needs_filing_text(query) and companies_read >= self.max_companies_with_text:
+                    print(
+                        f"[research.execute] filing-text cap reached "
+                        f"({self.max_companies_with_text}); metadata only for "
+                        f"{args.get('ticker') or args.get('cik')}"
+                    )
+                elif _query_needs_filing_text(query):
+                    companies_read += 1
                     candidate = await self._select_filing_to_read(query, filings)
                     if candidate:
                         cik = args.get("cik") or _cik_for_ticker(args.get("ticker"))
@@ -202,10 +216,8 @@ Return ONLY JSON:
 {{"passed": true, "confidence": "HIGH|MEDIUM|LOW", "feedback": "short note"}}
 """
         raw = chat(prompt)
-        verdict = _parse_json(raw)
-        confidence = str(verdict.get("confidence", "LOW")).upper()
-        if confidence not in {"HIGH", "MEDIUM", "LOW"}:
-            confidence = "LOW"
+        verdict = parse_json_from_llm(raw)
+        confidence = normalize_confidence(verdict.get("confidence", "LOW"))
         return bool(verdict.get("passed", False)), str(verdict.get("feedback", "")), confidence  # type: ignore[return-value]
 
     async def _select_filing_to_read(
@@ -247,7 +259,7 @@ OR if none of the listed filings would contain text relevant to the query:
 """
         raw = chat(prompt)
         try:
-            selected = _parse_json(raw)
+            selected = parse_json_from_llm(raw)
         except json.JSONDecodeError:
             return None
 
@@ -280,13 +292,17 @@ OR if none of the listed filings would contain text relevant to the query:
         if not isinstance(text, str) or not text.strip():
             return
         accession = str(args.get("accession_number", "unknown"))
+        doc_id = f"sec::{accession}"
+        if self.semantic_memory.has(doc_id):
+            print(f"[research.memory] Filing already cached; skipping embed: {accession}")
+            return
         try:
             self.semantic_memory.add_documents(
                 texts=[text],
                 metadatas=[
                     {"source": "sec_edgar", "accession_number": accession, "cik": args.get("cik")}
                 ],
-                ids=[f"sec::{accession}"],
+                ids=[doc_id],
             )
             print(f"[research.memory] Ingested filing text into semantic memory: {accession}")
         except Exception as exc:
@@ -329,18 +345,3 @@ def _cik_for_ticker(ticker: str | None) -> str | None:
         "ASML": "0000937966",
     }
     return ticker_map.get(ticker.upper())
-
-
-def _parse_json(text: str) -> dict[str, Any]:
-    text = text.strip()
-    fence = re.search(r"```(?:json)?\s*([\s\S]*?)```", text)
-    if fence:
-        text = fence.group(1).strip()
-    try:
-        return json.loads(text)
-    except json.JSONDecodeError:
-        start = text.find("{")
-        end = text.rfind("}")
-        if start >= 0 and end > start:
-            return json.loads(text[start : end + 1])
-        raise

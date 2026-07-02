@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import uuid
 from typing import Any
 
@@ -13,6 +14,22 @@ from protocols.auth import a2a_auth_token, auth_headers, tls_verify_enabled
 JsonDict = dict[str, Any]
 _tracer = get_tracer("protocols.a2a")
 
+# Default A2A request timeout. The research agent issues many sequential Granite
+# calls (plan, per-company filing selection, analysis, reflect) that, under
+# single-GPU Ollama contention, can run several minutes. Configurable via
+# ATLAS_A2A_TIMEOUT so demo hosts can tune without code edits.
+_DEFAULT_A2A_TIMEOUT = 600.0
+
+
+def default_a2a_timeout() -> float:
+    raw = os.getenv("ATLAS_A2A_TIMEOUT")
+    if raw:
+        try:
+            return float(raw)
+        except ValueError:
+            pass
+    return _DEFAULT_A2A_TIMEOUT
+
 
 class A2AClient:
     """Small HTTP/JSON-RPC client for Atlas A2A agents."""
@@ -20,13 +37,11 @@ class A2AClient:
     def __init__(
         self,
         *,
-        # 300s headroom: a reflection retry runs two plan→execute→reflect passes,
-        # which can exceed lower timeouts on single-GPU hardware
-        timeout: float = 300.0,
+        timeout: float | None = None,
         auth_token: str | None = None,
         verify_tls: bool | None = None,
     ) -> None:
-        self.timeout = timeout
+        self.timeout = timeout if timeout is not None else default_a2a_timeout()
         self._auth_token = auth_token if auth_token is not None else a2a_auth_token()
         self._verify_tls = tls_verify_enabled() if verify_tls is None else verify_tls
         self._next_id = 0

@@ -130,6 +130,18 @@ class SemanticMemory:
     def count(self) -> int:
         return self.collection.count()
 
+    def has(self, doc_id: str) -> bool:
+        """True when any chunk for ``doc_id`` already exists in the collection.
+
+        Chunks are stored with ids like ``{doc_id}::chunk-{index}``, so an exact
+        id check would miss them; match on the id prefix instead.
+        """
+        try:
+            existing = self.collection.get(ids=[f"{doc_id}::chunk-0"])
+            return bool(existing.get("ids"))
+        except Exception:
+            return False
+
 
 def _chunk_text(text: str, *, max_chars: int = 1200, overlap: int = 150) -> list[str]:
     """Simple character chunker until a tokenizer-aware splitter is needed."""

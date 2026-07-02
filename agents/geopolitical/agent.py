@@ -8,10 +8,9 @@ that it is based on Granite model knowledge rather than live event data.
 from __future__ import annotations
 
 import json
-import re
 from typing import Any
 
-from agents.base import AgentResult, BaseAgent, Confidence
+from agents.base import AgentResult, BaseAgent, Confidence, normalize_confidence, parse_json_from_llm
 from agents.formatting import MARKDOWN_FORMAT_INSTRUCTIONS
 from memory.semantic import SemanticMemory
 from services.llm import chat
@@ -49,7 +48,7 @@ Return ONLY valid JSON:
 """
         raw = chat(prompt)
         try:
-            return _parse_json(raw)
+            return parse_json_from_llm(raw)
         except json.JSONDecodeError:
             return {
                 "risk_dimensions": ["geopolitical escalation", "trade disruption"],
@@ -137,11 +136,11 @@ Return ONLY valid JSON:
 """
         raw = chat(prompt)
         try:
-            verdict = _parse_json(raw)
+            verdict = parse_json_from_llm(raw)
         except json.JSONDecodeError:
             return False, "Reflection did not return valid JSON.", "LOW"
 
-        confidence = str(verdict.get("confidence", "LOW")).upper()
+        confidence = normalize_confidence(verdict.get("confidence", "LOW"))
         if confidence not in {"MEDIUM", "LOW"}:
             confidence = "LOW"
         return bool(verdict.get("passed")), str(verdict.get("feedback", "")), confidence  # type: ignore[return-value]
@@ -169,18 +168,3 @@ Return ONLY valid JSON:
                 f"- {match['text']}\n  metadata={metadata} distance={match.get('distance')}"
             )
         return "\n\n".join(lines), sources
-
-
-def _parse_json(text: str) -> dict[str, Any]:
-    text = text.strip()
-    fence = re.search(r"```(?:json)?\s*([\s\S]*?)```", text)
-    if fence:
-        text = fence.group(1).strip()
-    try:
-        return json.loads(text)
-    except json.JSONDecodeError:
-        start = text.find("{")
-        end = text.rfind("}")
-        if start >= 0 and end > start:
-            return json.loads(text[start : end + 1])
-        raise

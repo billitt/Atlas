@@ -28,7 +28,7 @@ Prerequisites: Python 3.11+, Rust stable, [Ollama](https://ollama.com/download).
 | Python specialists (`:9001`–`:9004`) | Plan → execute → reflect; delegate via A2A |
 | LangGraph + Synthesis | DAG plan, merge, Guardian validation |
 | Memory | ChromaDB semantic, SQLite episodic |
-| UI | Typer CLI or Carbon web UI + FastAPI (`atlas-api`) |
+| UI | Typer CLI or React web dashboard (Vite + Tailwind) + FastAPI (`atlas-api`) |
 
 Query streaming uses **HTTP SSE**, not WebSockets. Docs: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · [docs/AGENTS.md](docs/AGENTS.md) · [docs/PROTOCOLS.md](docs/PROTOCOLS.md) · [docs/MEMORY.md](docs/MEMORY.md) · [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md) · [docs/VERIFICATION.md](docs/VERIFICATION.md) · [docs/DEVLOG.md](docs/DEVLOG.md) · [CLAUDE.md](CLAUDE.md)
 
@@ -44,7 +44,7 @@ Phases **0–16** implemented. Taiwan Strait demo exercises the full stack.
 | 6–7 | EDGAR MCP, Research agent, Guardian |
 | 8–9 | Scheduled briefings, alerts |
 | 10–11 | OpenTelemetry, Typer CLI |
-| 12 | Carbon web UI + FastAPI (replaced Streamlit) |
+| 12 | React web dashboard (Vite + Tailwind) + FastAPI (replaced Streamlit) |
 | 13–14 | Taiwan demo, docs, verification |
 | 15 | Localhost bind, optional auth, rate limits |
 | 16 | `mcp-trade` Comtrade MCP, live Supply Chain agent |
@@ -58,7 +58,7 @@ atlas/
 ├── agents/           # Specialist agents (market, geopolitical, supply_chain, research, synthesis, guardian)
 ├── cli/              # Typer CLI (`atlas query`, `atlas status`, etc.)
 ├── api/              # FastAPI streaming API (`atlas-api`)
-├── web/              # Carbon React dashboard (Vite)
+├── web/              # React dashboard (Vite + Tailwind)
 ├── orchestration/    # LangGraph synthesis workflow
 ├── protocols/        # MCP client + A2A server/client/discovery
 ├── memory/           # Semantic (ChromaDB), episodic (SQLite), working
@@ -100,7 +100,7 @@ Expected output: [data/sample_scenarios/taiwan_demo_expected_output.md](data/sam
 ## Architecture Snapshot
 
 ```text
-User (CLI / Carbon web UI / demos)
+User (CLI / React web dashboard / demos)
   -> LangGraph: plan -> delegate -> synthesize -> guardian
   -> Market :9001 -> MCP :8001 -> Yahoo Finance
   -> Geopolitical :9002 -> semantic memory (seed GDELT)

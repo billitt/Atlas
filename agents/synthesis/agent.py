@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 from collections.abc import Callable
 from datetime import datetime
 from typing import Any
@@ -34,9 +35,10 @@ class SynthesisAgent:
         episodic_memory: EpisodicMemory | None = None,
     ) -> None:
         self.agent_cards = agent_cards
-        # 300s headroom: a reflection retry runs two plan→execute→reflect passes,
-        # which can exceed lower timeouts on single-GPU hardware
-        self.a2a = a2a_client or A2AClient(timeout=300.0)
+        # A2AClient() picks up the 600s default (env: ATLAS_A2A_TIMEOUT). Research
+        # fans out many sequential Granite calls and can run several minutes under
+        # single-GPU Ollama contention.
+        self.a2a = a2a_client or A2AClient()
         self.card_by_key = {agent_key(card): card for card in agent_cards}
         self.episodic_memory = episodic_memory or EpisodicMemory()
 
@@ -82,13 +84,35 @@ class SynthesisAgent:
             task = str(step.get("task", ""))
             async with semaphore:
                 print(f"[synthesis.delegate] {agent} -> {task}")
-                response = await self.a2a.send_task(str(card["url"]), task)
+                step_start = time.perf_counter()
+                # Isolate per-agent failures: a single A2A timeout must not abort
+                # the whole fan-out (asyncio.gather would otherwise propagate it
+                # and skip synthesis entirely). Fill the slot with an error
+                # artifact so synthesis can proceed on partial results.
+                try:
+                    response = await self.a2a.send_task(str(card["url"]), task)
+                    artifact = _first_artifact(response)
+                except Exception as exc:  # noqa: BLE001 - degrade gracefully on any A2A failure
+                    elapsed = time.perf_counter() - step_start
+                    print(
+                        f"[synthesis.delegate] {agent} failed after {elapsed:.0f}s "
+                        f"({type(exc).__name__}); proceeding with partial results"
+                    )
+                    response = {}
+                    artifact = {
+                        "metadata": {
+                            "analysis": None,
+                            "confidence": "LOW",
+                            "sources": [],
+                            "error": f"{type(exc).__name__}: {exc}",
+                        }
+                    }
             result = {
                 "agent": agent,
                 "task": task,
                 "card": card,
                 "response": response,
-                "artifact": _first_artifact(response),
+                "artifact": artifact,
             }
             if on_step_done is not None:
                 on_step_done(result)
@@ -159,6 +183,9 @@ Relevant past briefings from episodic memory:
 Instructions:
 - Merge the market, geopolitical, and supply-chain perspectives.
 - Include research/filing evidence when available.
+- If a specialist result has a null analysis or an "error" field (e.g. it timed
+  out), explicitly note that its input is unavailable rather than omitting it
+  silently or inventing its findings.
 - Explicitly call out confidence differences and live-data limitations.
 - Resolve conflicts; if no direct conflict exists, say the outputs are complementary.
 - Keep the briefing grounded in the specialist artifacts.
@@ -211,13 +238,16 @@ def _first_artifact(task_response: JsonDict) -> JsonDict:
 
 def _compact_result(result: JsonDict) -> JsonDict:
     metadata = result.get("artifact", {}).get("metadata", {})
-    return {
+    compact = {
         "agent": result.get("agent"),
         "task": result.get("task"),
         "analysis": metadata.get("analysis"),
         "confidence": metadata.get("confidence"),
         "sources": metadata.get("sources", []),
     }
+    if metadata.get("error"):
+        compact["error"] = metadata["error"]
+    return compact
 
 
 def _collect_sources(agent_results: list[JsonDict]) -> list[JsonDict]:

@@ -8,8 +8,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from agents.base import AgentResult, BaseAgent, Confidence
-from agents.market.agent import MarketIntelligenceAgent, _parse_json_from_llm
+from agents.base import AgentResult, BaseAgent, Confidence, parse_json_from_llm
+from agents.market.agent import MarketIntelligenceAgent
 
 
 class StubAgent(BaseAgent):
@@ -50,14 +50,14 @@ class StubAgent(BaseAgent):
 
 
 def test_json_parsing_handles_markdown_fences() -> None:
-    parsed = _parse_json_from_llm('```json\n{"passed": true, "confidence": "HIGH"}\n```')
+    parsed = parse_json_from_llm('```json\n{"passed": true, "confidence": "HIGH"}\n```')
     assert parsed["passed"] is True
     assert parsed["confidence"] == "HIGH"
 
 
 def test_json_parsing_handles_embedded_braces() -> None:
     raw = 'Analysis preamble {"passed": false, "confidence": "LOW", "feedback": "bad"} trailing'
-    parsed = _parse_json_from_llm(raw)
+    parsed = parse_json_from_llm(raw)
     assert parsed["passed"] is False
     assert parsed["confidence"] == "LOW"
 

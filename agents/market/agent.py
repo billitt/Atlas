@@ -7,7 +7,7 @@ import re
 from time import perf_counter
 from typing import Any
 
-from agents.base import AgentResult, BaseAgent, Confidence
+from agents.base import AgentResult, BaseAgent, Confidence, normalize_confidence, parse_json_from_llm
 from agents.formatting import MARKDOWN_FORMAT_INSTRUCTIONS
 from agents.market import tools as market_tools
 from memory.episodic import EpisodicMemory
@@ -17,22 +17,6 @@ from protocols.mcp.endpoints import mcp_market_url
 from services.llm import chat
 
 DEFAULT_MCP_URL = mcp_market_url()
-
-
-def _parse_json_from_llm(text: str) -> dict[str, Any]:
-    """Extract a JSON object from model output (raw or ```json fenced)."""
-    text = text.strip()
-    fence = re.search(r"```(?:json)?\s*([\s\S]*?)```", text)
-    if fence:
-        text = fence.group(1).strip()
-    try:
-        return json.loads(text)
-    except json.JSONDecodeError:
-        start = text.find("{")
-        end = text.rfind("}")
-        if start >= 0 and end > start:
-            return json.loads(text[start : end + 1])
-        raise
 
 
 def _fallback_symbol_from_query(query: str) -> str:
@@ -106,7 +90,7 @@ JSON schema:
 """
         raw = chat(prompt)
         try:
-            parsed = _parse_json_from_llm(raw)
+            parsed = parse_json_from_llm(raw)
         except json.JSONDecodeError:
             symbol = _fallback_symbol_from_query(query)
             print(f"[plan] Could not parse Granite JSON plan; falling back to get_quote({symbol})")
@@ -234,10 +218,10 @@ Respond with ONLY valid JSON (no markdown):
 }}
 """
         raw = chat(prompt)
-        verdict = _parse_json_from_llm(raw)
+        verdict = parse_json_from_llm(raw)
 
         passed = bool(verdict.get("passed", False))
-        confidence = _normalize_confidence(verdict.get("confidence", "LOW"))
+        confidence = normalize_confidence(verdict.get("confidence", "LOW"))
         feedback = str(verdict.get("feedback", "no feedback provided"))
 
         self._reflection_feedback = feedback
@@ -276,10 +260,3 @@ Respond with ONLY valid JSON (no markdown):
             f"- {match['text']}\n  metadata={match['metadata']} distance={match['distance']}"
             for match in matches
         )
-
-
-def _normalize_confidence(value: str) -> Confidence:
-    upper = str(value).upper().strip()
-    if upper in ("HIGH", "MEDIUM", "LOW"):
-        return upper  # type: ignore[return-value]
-    return "LOW"

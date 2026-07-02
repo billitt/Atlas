@@ -4,6 +4,7 @@
 
 mod comtrade;
 mod mcp;
+mod seed;
 
 use axum::{
     extract::State,
@@ -23,13 +24,15 @@ pub const COMTRADE_DELAY_MS: u64 = 250;
 pub struct AppState {
     pub http: reqwest::Client,
     pub api_key: Option<String>,
+    pub seed_enabled: bool,
 }
 
 #[tokio::main]
 async fn main() {
     dotenvy::dotenv().ok();
 
-    let port = std::env::var("MCP_TRADE_PORT")
+    let port = std::env::var("ATLAS_MCP_TRADE_PORT")
+        .or_else(|_| std::env::var("MCP_TRADE_PORT"))
         .ok()
         .and_then(|p| p.parse().ok())
         .unwrap_or(DEFAULT_PORT);
@@ -45,6 +48,19 @@ async fn main() {
         println!("mcp-trade: preview-only (500 cap)");
     }
 
+    let seed_enabled = std::env::var("ATLAS_COMTRADE_SEED")
+        .ok()
+        .map(|value| {
+            matches!(
+                value.trim().to_ascii_lowercase().as_str(),
+                "1" | "true" | "yes" | "on"
+            )
+        })
+        .unwrap_or(false);
+    if seed_enabled {
+        println!("mcp-trade: seed mode ON (curated rows served as live data)");
+    }
+
     let state = AppState {
         http: reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(60))
@@ -52,6 +68,7 @@ async fn main() {
             .build()
             .expect("failed to build Comtrade HTTP client"),
         api_key,
+        seed_enabled,
     };
 
     let app = apply_security_layers(

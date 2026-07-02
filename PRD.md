@@ -1,6 +1,6 @@
 # Atlas — Global Intelligence Platform | Project Context
 
-**Atlas** is a global business intelligence system powered by autonomous AI agents that communicate via industry-standard protocols. This document is the current plan and master reference point. Nothing here is sacred except the core goal.
+**Atlas** is a global business intelligence system powered by autonomous AI agents that communicate via industry-standard protocols. This document is the current plan and master reference point.
 
 **Status (June 2026):** Phases **0–16 complete**. Three Rust MCP servers, four Python specialist agents, LangGraph synthesis, CLI and web UI. See [README.md](README.md) and [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md).
 
@@ -25,7 +25,7 @@ This is a **portfolio project** demonstrating:
 These don't change without explicit discussion:
 
 - **100% open source.** Zero proprietary dependencies. Every component must be Apache 2.0, MIT, or equivalent. No OpenAI, no Claude API, no paid services.
-- **On-prem / air-gapped capable.** The system must run entirely on local hardware with no external API calls required at runtime. Data ingestion can pull from the internet, but inference and analysis must be self-contained.
+- **On-prem/Cloud-ready.** The system must run entirely on local hardware with no external API calls required at runtime. Data ingestion can pull from the internet, but inference and analysis must be self-contained. Next Phase, build cloud hook.
 - **Single-user demo target.** Auth and multi-tenancy are out of scope. The system is optimized for one analyst operating it locally.
 - **Protocol-native.** All data source connections use MCP. All inter-agent communication uses A2A. No ad-hoc integration patterns.
 
@@ -37,7 +37,7 @@ Atlas is a **hybrid Rust + Python system**. The performance-critical data layer 
 
 This split reflects production practice: the hot path is Rust, the reasoning layer is Python. It also demonstrates architectural maturity — knowing where language choice matters and where it doesn't.
 
-**MCP (Model Context Protocol)** — Anthropic's open standard for connecting agents to tools and data sources. Every external data adapter in Atlas (FRED, EDGAR, GDELT, Yahoo Finance, etc.) is implemented as a **Rust MCP server**. This means any MCP-compatible client can plug into Atlas's data layer. We're building infrastructure, not a closed system. MCP is governed by the Linux Foundation's Agentic AI Foundation (AAIF) and is adopted by every major AI provider. Atlas implements MCP servers in Rust directly against the spec using `axum`, `serde`, and `tokio` — building from the spec demonstrates deeper protocol understanding than wrapping an SDK.
+**MCP (Model Context Protocol)** — Anthropic's open standard for connecting agents to tools and data sources. Every external data adapter in Atlas (FRED, EDGAR, GDELT, Yahoo Finance, etc.) is implemented as a **Rust MCP server**. This means any MCP-compatible client can plug into Atlas's data layer. We're building infrastructure, not a closed system. MCP is governed by the Linux Foundation's Agentic AI Foundation (AAIF) and is adopted by every major AI provider. Atlas implements MCP servers in Rust directly against the spec using `axum`, `serde`, and `tokio`.
 
 **A2A (Agent-to-Agent Protocol)** — Google's open standard for inter-agent communication. Atlas agents discover each other's capabilities through Agent Cards, delegate tasks via the protocol, and exchange structured results over HTTP with JSON-RPC 2.0. A2A reached v1.0 in early 2026 with support for gRPC and signed Agent Cards. This means a third-party agent could theoretically be plugged into the Atlas system and participate without modification.
 

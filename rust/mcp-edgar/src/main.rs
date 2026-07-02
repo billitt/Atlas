@@ -25,7 +25,8 @@ pub struct AppState {
 
 #[tokio::main]
 async fn main() {
-    let port = std::env::var("MCP_EDGAR_PORT")
+    let port = std::env::var("ATLAS_MCP_EDGAR_PORT")
+        .or_else(|_| std::env::var("MCP_EDGAR_PORT"))
         .ok()
         .and_then(|p| p.parse().ok())
         .unwrap_or(DEFAULT_PORT);

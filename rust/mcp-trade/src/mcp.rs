@@ -123,11 +123,20 @@ async fn handle_tools_call(
 
     let query = parse_trade_query(&args)?;
 
-    let result = match params.name.as_str() {
-        "get_trade_data" => get_trade_data(&state.http, &state.api_key, &query).await,
-        "get_tariffline" => get_tariffline(&state.http, &state.api_key, &query).await,
-        "preview_trade" => preview_trade(&state.http, &query).await,
-        other => return Err((-32602, format!("unknown tool: {other}"))),
+    let seeded = if state.seed_enabled {
+        crate::seed::seed_result(&params.name, &query)
+    } else {
+        None
+    };
+
+    let result = match seeded {
+        Some(trade) => Ok(trade),
+        None => match params.name.as_str() {
+            "get_trade_data" => get_trade_data(&state.http, &state.api_key, &query).await,
+            "get_tariffline" => get_tariffline(&state.http, &state.api_key, &query).await,
+            "preview_trade" => preview_trade(&state.http, &query).await,
+            other => return Err((-32602, format!("unknown tool: {other}"))),
+        },
     };
 
     match result {

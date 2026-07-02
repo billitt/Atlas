@@ -2,51 +2,18 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
-import re
-import time
 from datetime import datetime, timezone
 from typing import Any, Literal
 
-from agents.base import AgentResult, BaseAgent, Confidence
+from agents.base import AgentResult, BaseAgent, Confidence, normalize_confidence, parse_json_from_llm
 from agents.formatting import MARKDOWN_FORMAT_INSTRUCTIONS
 from agents.supply_chain import tools as trade_tools
 from memory.semantic import SemanticMemory
 from protocols.mcp.client import McpClient
 from protocols.mcp.endpoints import mcp_trade_url
 from services.llm import chat
-
-_DEBUG_LOG_PATH = "debug-ea8763.log"
-
-
-def _debug_log(
-    location: str,
-    message: str,
-    data: dict[str, Any],
-    *,
-    hypothesis_id: str,
-    run_id: str = "pre-fix",
-) -> None:
-    # region agent log
-    try:
-        with open(_DEBUG_LOG_PATH, "a", encoding="utf-8") as log_file:
-            log_file.write(
-                json.dumps(
-                    {
-                        "sessionId": "ea8763",
-                        "timestamp": int(time.time() * 1000),
-                        "location": location,
-                        "message": message,
-                        "data": data,
-                        "hypothesisId": hypothesis_id,
-                        "runId": run_id,
-                    }
-                )
-                + "\n"
-            )
-    except OSError:
-        pass
-    # endregion
 
 DEFAULT_COMTRADE_MCP_URL = mcp_trade_url()
 
@@ -128,14 +95,18 @@ def _fallback_plan_from_query(query: str) -> dict[str, Any]:
     countries = _match_country_codes(query)
     cmd_code = _match_commodity_code(query)
 
-    # Partner is the non-reporter country of interest; reporter defaults to World
-    # so a single named country (e.g. Taiwan) is treated as the trade partner.
+    # Directionality mirrors plan(): never use World (reporterCode "0"), which
+    # returns no bilateral rows. A single named country is treated as the source
+    # (partner); the US (842) is a concrete proxy importer (reporter).
     if len(countries) >= 2:
         reporter_code, partner_code = countries[0], countries[1]
     elif len(countries) == 1:
-        reporter_code, partner_code = "0", countries[0]
+        if countries[0] == "842":
+            reporter_code, partner_code = "842", None
+        else:
+            reporter_code, partner_code = "842", countries[0]
     else:
-        reporter_code, partner_code = "0", None
+        reporter_code, partner_code = "842", None
 
     arguments: dict[str, Any] = {
         "reporterCode": reporter_code,
@@ -201,7 +172,7 @@ How to choose parameters:
   then map them to UN M49 country codes and HS commodity codes.
 - reporterCode / partnerCode are UN M49 numeric codes. Reference:
   842=USA, 156=China, 490=Taiwan (Comtrade reports Taiwan as "Other Asia, nes"),
-  276=Germany, 392=Japan, 410=South Korea, 528=Netherlands, 0=World.
+  276=Germany, 392=Japan, 410=South Korea, 528=Netherlands.
   Note: Taiwan is 490 in Comtrade, NOT 158.
 - DIRECTIONALITY (critical): reporterCode is the country whose trade is being
   measured — for an import/dependency query, this is the IMPORTING country (the
@@ -212,9 +183,11 @@ How to choose parameters:
 - Example: "How dependent is the US on Taiwan semiconductor imports" =>
   reporterCode 842 (US, the importer), partnerCode 490 (Taiwan, the source),
   cmdCode 8542, flowCode M.
-- If the query names no importing country and asks about a single source country
-  in general (e.g. "global reliance on Taiwan chips"), use reporterCode 0 (World)
-  and partnerCode = that source country.
+- NEVER use reporterCode 0 (World): Comtrade returns no bilateral rows for a
+  World reporter, so it yields empty results. If the query names only a single
+  source country and no importer (e.g. "global reliance on Taiwan chips"), set
+  partnerCode = that source country and default reporterCode to 842 (USA, a
+  major importer) as a concrete proxy for global dependency.
 - cmdCode is an HS commodity code. Reference:
   8542=electronic integrated circuits / semiconductors, 8541=semiconductor
   devices (diodes/transistors), 854231=processors and controllers.
@@ -225,40 +198,33 @@ How to choose parameters:
 - Use get_trade_data for aggregate trade flows; get_tariffline for tariff-line
   granularity.
 
-Output ONLY valid JSON in this shape (values below are PLACEHOLDERS — replace
-them with codes derived from the query, do not echo them):
+Output ONLY the JSON object. No markdown, no code fences, no prose, no // or
+/* */ comments. Every value must be a real code derived from the query, not a
+placeholder.
+
+Worked example to IMITATE (do not echo it). For the query
+"How dependent is the US on Taiwan semiconductor imports?" the correct output is:
 {{
   "tool": "get_trade_data",
   "arguments": {{
-    "reporterCode": "<M49 reporter>",
-    "partnerCode": "<M49 partner>",
-    "cmdCode": "<HS code>",
-    "flowCode": "M or X",
+    "reporterCode": "842",
+    "partnerCode": "490",
+    "cmdCode": "8542",
+    "flowCode": "M",
     "period": "{latest_year}",
     "typeCode": "C",
     "freqCode": "A",
     "clCode": "HS"
   }},
-  "rationale": "how the query maps to these codes"
+  "rationale": "US is the importer (reporter 842); Taiwan is the source (partner 490); HS 8542 semiconductors; imports flow M."
 }}
+
+Now produce the JSON for the actual user query above.
 """
         raw = chat(prompt)
         try:
-            parsed = _parse_json(raw)
+            parsed = parse_json_from_llm(raw)
             print("[supply_chain.plan] LLM plan parsed OK")
-            # region agent log
-            _debug_log(
-                "agent.py:plan",
-                "LLM plan parsed OK",
-                {
-                    "plan_source": "llm",
-                    "rationale": parsed.get("rationale"),
-                    "arguments": parsed.get("arguments"),
-                    "raw_len": len(raw),
-                },
-                hypothesis_id="H2",
-            )
-            # endregion
             return parsed
         except json.JSONDecodeError as exc:
             print(
@@ -268,24 +234,7 @@ them with codes derived from the query, do not echo them):
             print("[supply_chain.plan] --- RAW LLM OUTPUT (first 800 chars) ---")
             print(raw[:800])
             print("[supply_chain.plan] --- END RAW ---")
-            fallback = _fallback_plan_from_query(query)
-            # region agent log
-            _debug_log(
-                "agent.py:plan",
-                "LLM plan parse failed; keyword fallback used",
-                {
-                    "plan_source": "fallback",
-                    "parse_error": str(exc),
-                    "raw_preview": raw[:800],
-                    "raw_len": len(raw),
-                    "matched_countries": _match_country_codes(query),
-                    "fallback_arguments": fallback.get("arguments"),
-                    "fallback_rationale": fallback.get("rationale"),
-                },
-                hypothesis_id="H1",
-            )
-            # endregion
-            return fallback
+            return _fallback_plan_from_query(query)
 
     async def execute(self, query: str, plan: dict[str, Any]) -> AgentResult:
         print("[supply_chain.execute] Fetching live Comtrade data...")
@@ -301,74 +250,34 @@ them with codes derived from the query, do not echo them):
         # step back up to two earlier years if the year has no published rows yet.
         requested_period = str(args.get("period") or _latest_comtrade_year())
         candidate_years = self._candidate_years(requested_period)
-        # region agent log
-        _debug_log(
-            "agent.py:execute",
-            "execute started with plan arguments",
-            {
-                "tool": tool,
-                "arguments": args,
-                "candidate_years": candidate_years,
-                "plan_rationale": plan.get("rationale"),
-            },
-            hypothesis_id="H2",
-        )
-        # endregion
 
+        rate_limited = False
         for year in candidate_years:
-            try:
-                payload = await self._fetch_trade(tool, args, year)
-            except Exception as exc:
-                mcp_error = str(exc)
-                print(f"[supply_chain.execute] MCP call failed: {exc}")
-                # region agent log
-                _debug_log(
-                    "agent.py:execute",
-                    "MCP call raised exception",
-                    {"year": year, "error": str(exc), "is_429": "429" in str(exc)},
-                    hypothesis_id="H3",
-                )
-                # endregion
+            payload, year_error, year_429 = await self._fetch_year_with_retry(tool, args, year)
+            if year_429:
+                rate_limited = True
+            if year_error is not None:
+                mcp_error = year_error
+                print(f"[supply_chain.execute] MCP call failed: {year_error}")
                 break
 
-            if payload.get("error"):
-                mcp_error = str(payload["error"])
-                # region agent log
-                _debug_log(
-                    "agent.py:execute",
-                    "MCP payload returned error",
-                    {
-                        "year": year,
-                        "error": str(payload["error"]),
-                        "is_429": "429" in str(payload["error"]),
-                    },
-                    hypothesis_id="H3",
-                )
-                # endregion
-                break
-
-            rows = payload.get("rows") or []
-            count = payload.get("count", 0)
+            rows = (payload or {}).get("rows") or []
+            count = (payload or {}).get("count", 0)
             if count > 0 and rows:
                 # Record the year actually used so sources/cache reflect it.
                 args["period"] = year
                 return self._analyze_live(query, plan, args, tool, payload, rows)
             print(f"[supply_chain.execute] No Comtrade rows for period {year}; stepping back")
 
+        # H5: a World reporter (reporterCode "0") returns no bilateral rows, so an
+        # all-zero result there is a directionality bug, not genuine "no data".
+        if mcp_error is None and str(args.get("reporterCode")) == "0":
+            print(
+                "[supply_chain.execute] reporterCode=0 (World) returned no rows for any year; "
+                "this is the empty World-reporter path, not missing data."
+            )
+
         cache_context, cache_sources, fetched_at = self._cached_comtrade_context(query)
-        # region agent log
-        _debug_log(
-            "agent.py:execute",
-            "live fetch exhausted; cache probe result",
-            {
-                "mcp_error": mcp_error,
-                "cache_hit": bool(cache_context),
-                "cache_source_count": len(cache_sources),
-                "years_attempted": candidate_years,
-            },
-            hypothesis_id="H4",
-        )
-        # endregion
         if cache_context:
             self._data_mode = "cache"
             self._used_cache = True
@@ -386,15 +295,25 @@ them with codes derived from the query, do not echo them):
             )
 
         self._data_mode = "insufficient"
-        analysis = (
-            "## Insufficient trade data\n\n"
-            "Live UN Comtrade data could not be retrieved and no prior cached trade records "
-            "are available in semantic memory.\n\n"
-            f"**Error:** {mcp_error or 'empty response from Comtrade MCP'}\n\n"
-            "This assessment cannot quantify trade flows, dependencies, or volumes. "
-            "Retry when mcp-trade (:8003) is reachable or after a successful live fetch "
-            "populates the cache."
-        )
+        if rate_limited:
+            analysis = (
+                "## Trade data temporarily unavailable (rate limited)\n\n"
+                "The UN Comtrade API returned HTTP 429 (too many requests) and the retries "
+                "were also throttled. No cached trade records are available to fall back on.\n\n"
+                f"**Error:** {mcp_error or 'HTTP 429 Too Many Requests'}\n\n"
+                "This is a transient limit, not missing data. Retry shortly; a successful "
+                "fetch will also populate the cache for subsequent runs."
+            )
+        else:
+            analysis = (
+                "## Insufficient trade data\n\n"
+                "Live UN Comtrade data could not be retrieved and no prior cached trade records "
+                "are available in semantic memory.\n\n"
+                f"**Error:** {mcp_error or 'empty response from Comtrade MCP'}\n\n"
+                "This assessment cannot quantify trade flows, dependencies, or volumes. "
+                "Retry when mcp-trade (:8003) is reachable or after a successful live fetch "
+                "populates the cache."
+            )
         return {
             "analysis": analysis,
             "sources": [
@@ -437,6 +356,41 @@ them with codes derived from the query, do not echo them):
         if tool == "get_tariffline":
             return await trade_tools.call_get_tariffline(self.mcp, **common)
         return await trade_tools.call_get_trade_data(self.mcp, **common)
+
+    async def _fetch_year_with_retry(
+        self, tool: str, args: dict[str, Any], year: str
+    ) -> tuple[dict[str, Any] | None, str | None, bool]:
+        """Fetch one year, retrying transient HTTP 429s with short backoff.
+
+        Returns (payload, error, saw_429). On a non-429 error the call is not
+        retried. ``payload`` is None when an error is returned.
+        """
+        backoffs = [2.0, 4.0]
+        saw_429 = False
+        for attempt in range(len(backoffs) + 1):
+            try:
+                payload = await self._fetch_trade(tool, args, year)
+                error = payload.get("error")
+            except Exception as exc:  # noqa: BLE001 - surface MCP failure to caller
+                payload, error = None, str(exc)
+
+            if error is None:
+                return payload, None, saw_429
+
+            is_429 = "429" in str(error)
+            if is_429:
+                saw_429 = True
+            if is_429 and attempt < len(backoffs):
+                delay = backoffs[attempt]
+                print(
+                    f"[supply_chain.execute] Comtrade HTTP 429 for {year}; "
+                    f"retry {attempt + 1}/{len(backoffs)} after {delay}s"
+                )
+                await asyncio.sleep(delay)
+                continue
+            return None, str(error), saw_429
+
+        return None, "exhausted Comtrade retries", saw_429
 
     def _analyze_live(
         self,
@@ -608,14 +562,12 @@ Return ONLY valid JSON:
 """
         raw = chat(prompt)
         try:
-            verdict = _parse_json(raw)
+            verdict = parse_json_from_llm(raw)
         except json.JSONDecodeError:
             confidence: Confidence = "LOW" if self._used_cache else "MEDIUM"
             return False, "Reflection did not return valid JSON.", confidence
 
-        confidence = str(verdict.get("confidence", "LOW")).upper()
-        if confidence not in {"HIGH", "MEDIUM", "LOW"}:
-            confidence = "LOW"
+        confidence = normalize_confidence(verdict.get("confidence", "LOW"))
         if self._used_cache and confidence == "HIGH":
             confidence = "MEDIUM"
         feedback = str(verdict.get("feedback", ""))
@@ -625,48 +577,3 @@ Return ONLY valid JSON:
                 f"from {self._cache_fetched_at}."
             ).strip()
         return bool(verdict.get("passed")), feedback, confidence  # type: ignore[return-value]
-
-
-def _parse_json(text: str) -> dict[str, Any]:
-    original = text
-    text = text.strip()
-    fence = re.search(r"```(?:json)?\s*([\s\S]*?)```", text)
-    used_fence = bool(fence)
-    if fence:
-        text = fence.group(1).strip()
-    try:
-        return json.loads(text)
-    except json.JSONDecodeError as direct_exc:
-        start = text.find("{")
-        end = text.rfind("}")
-        if start >= 0 and end > start:
-            try:
-                return json.loads(text[start : end + 1])
-            except json.JSONDecodeError as slice_exc:
-                # region agent log
-                _debug_log(
-                    "agent.py:_parse_json",
-                    "brace-slice parse failed",
-                    {
-                        "used_fence": used_fence,
-                        "direct_error": str(direct_exc),
-                        "slice_error": str(slice_exc),
-                        "text_preview": original[:400],
-                    },
-                    hypothesis_id="H1",
-                )
-                # endregion
-                raise slice_exc from direct_exc
-        # region agent log
-        _debug_log(
-            "agent.py:_parse_json",
-            "direct parse failed; no usable braces",
-            {
-                "used_fence": used_fence,
-                "direct_error": str(direct_exc),
-                "text_preview": original[:400],
-            },
-            hypothesis_id="H1",
-        )
-        # endregion
-        raise
